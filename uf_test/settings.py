@@ -15,6 +15,20 @@ NEWSPIDER_MODULE = 'uf_test.spiders'
 # Define the scheduler that hooks into the URL Frontier:
 SCHEDULER='urlfrontier.scheduler.URLFrontierScheduler'
 SCHEDULER_URLFRONTIER_ENDPOINT='127.0.0.1:7071'
+SCHEDULER_URLFRONTIER_CODEC='frontera.contrib.backends.remote.codecs.json'
+
+# Use (incomplete) implementation as Frontera back-end:
+#SPIDER_MIDDLEWARES = {
+#    'frontera.contrib.scrapy.middlewares.schedulers.SchedulerSpiderMiddleware': 1000,
+#}
+#
+#DOWNLOADER_MIDDLEWARES = {
+#    'frontera.contrib.scrapy.middlewares.schedulers.SchedulerDownloaderMiddleware': 1000,
+#}
+#
+#SCHEDULER = 'frontera.contrib.scrapy.schedulers.frontier.FronteraScheduler'
+#
+#FRONTERA_SETTINGS = 'uf_test.frontera.settings'
 
 # Crawl responsibly by identifying yourself (and your website) on the user-agent
 USER_AGENT = 'uf_test (+https://anjackson.net)'

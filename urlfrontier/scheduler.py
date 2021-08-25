@@ -1,10 +1,7 @@
 import time
-import codecs
-import pickle
+import logging
 from typing import Optional, Type, TypeVar
 from twisted.internet.defer import Deferred
-
-import grpc
 
 from scrapy.crawler import Crawler
 from scrapy.spiders import Spider
@@ -15,6 +12,7 @@ from scrapy.http.response import Response
 from scrapy.utils.job import job_dir
 from scrapy.utils.misc import create_instance, load_object
 
+import grpc
 from urlfrontier_pb2_grpc import URLFrontierStub
 from urlfrontier_pb2 import GetParams, URLInfo, URLItem, DiscoveredURLItem, KnownURLItem, StringList
 
@@ -24,15 +22,22 @@ class URLFrontierScheduler():
 
     def __init__(
         self,
-        endpoint,
-        debug: bool = False,
+        settings,
         stats=None,
         crawler: Optional[Crawler] = None,
     ):
-        self.endpoint = endpoint
-        self.debug = debug
+        self.endpoint=crawler.settings['SCHEDULER_URLFRONTIER_ENDPOINT']
+        self.debug=crawler.settings.getbool('SCHEDULER_DEBUG')
         self.stats = stats
         self.crawler = crawler
+        codec_path = settings.get('SCHEDULER_URLFRONTIER_CODEC')
+        decoder_cls = load_object(codec_path+".Decoder")
+        encoder_cls = load_object(codec_path+".Encoder")
+        store_content = settings.get('STORE_CONTENT')
+        self._encoder = encoder_cls(Request, send_body=store_content)
+        self._decoder = decoder_cls(Request, Response)
+        self._logger = logging.getLogger("urlfrontier-scheduler")
+        
  
     #def from_crawler(cls: Type[SchedulerTV], crawler) -> SchedulerTV:
     @classmethod
@@ -41,8 +46,7 @@ class URLFrontierScheduler():
         Factory method, initializes the scheduler with arguments taken from the crawl settings
         """
         scheduler = cls(
-            endpoint=crawler.settings['SCHEDULER_URLFRONTIER_ENDPOINT'],
-            debug=crawler.settings.getbool('SCHEDULER_DEBUG'),
+            settings=crawler.settings,
             stats=crawler.stats,
             crawler=crawler,
         )
@@ -93,16 +97,15 @@ class URLFrontierScheduler():
         For reference, the default Scrapy scheduler returns ``False`` when the
         request is rejected by the dupefilter.
         """
-        # TODO Convert Request to URLInfo
-        print("Enqueuing "+ str(request) + " " + request.url)
+        self._logger.info("PutURL request=" + str(request))
 
-        # TODO Replace with simpler encoding of subset of fields:
-        #scrapy_request = pickled = codecs.encode(pickle.dumps(request), "base64").decode()
-        
+        # Use Frontera's string encoding logic:
+        encoded_request = self._encoder.encode_request(request)        
+        #  Convert Request to URLInfo
         urlinfo = URLInfo(
             url=request.url,
             key=None, # Use frontier default
-            #metadata={'scrapy_request': StringList(values=[scrapy_request])}
+            metadata={'scrapy_request': StringList(values=[encoded_request])}
         )
         if request.dont_filter:
             now_ts = int(time.time())
@@ -124,12 +127,12 @@ class URLFrontierScheduler():
         # Ask for a single URL:
         uf_request = GetParams(max_urls_per_queue=1, max_queues=1)
         for uf_response in self._stub.GetURLs(uf_request):
-            print("recv request from URL Frontier url=%s, metadata=%s" % (uf_response.url, uf_response.metadata))
+            self._logger.debug("GetURLs rx url=%s, metadata=%s" % (uf_response.url, uf_response.metadata))
             # Convert URLInfo into a Request
             # and return it
             if 'scrapy_request' in uf_response.metadata:
-                scrapy_request = uf_response.metadata['scrapy_request'].values[0]
-                return pickle.loads(codecs.decode(scrapy_request.encode(), "base64"))
+                encoded_request = uf_response.metadata['scrapy_request'].values[0]
+                return self._decoder.decode_request(encoded_request)
             else:
                 return Request(url=uf_response.url)
 
@@ -139,7 +142,7 @@ class URLFrontierScheduler():
     def _record_response(self, response, request, spider):
         ### Signal handler to record downloader outcomes
         # https://docs.scrapy.org/en/latest/topics/signals.html#response-downloaded
-        print("Recording response...")
+        self._logger.debug(f"Recording crawl outcome request={request} response={response}")
         # Convert Response to KnownURLItem
         urlinfo = URLInfo(
             url=request.url
@@ -149,7 +152,6 @@ class URLFrontierScheduler():
 
     def _PutURLs(self, uf_request):
         for uf_response in self._stub.PutURLs(iter([uf_request])):
-            print("recv from PUT url=%s, message=%s" %
-              (uf_response.value, str(uf_response)))
-              # TODO ack
+            self._logger.debug("PutURL url=%s OK" % (uf_response.value))
             return True
+        return False
