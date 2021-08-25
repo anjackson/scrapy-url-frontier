@@ -13,7 +13,7 @@ from scrapy.utils.job import job_dir
 from scrapy.utils.misc import create_instance, load_object
 
 from urlfrontier_pb2_grpc import URLFrontierStub
-from urlfrontier_pb2 import GetParams, URLInfo, DiscoveredURLItem, KnownURLItem
+from urlfrontier_pb2 import GetParams, URLInfo, URLItem, DiscoveredURLItem, KnownURLItem, StringList
 
 #class URLFrontierScheduler(BaseScheduler):
 # BaseScheduler appears not to be release yet...
@@ -92,12 +92,13 @@ class URLFrontierScheduler():
         """
         # TODO Convert Request to URLInfo
         print("Enqueuing "+ str(request) + " " + request.url)
+        md_example = StringList(values=["values"])
         urlinfo = URLInfo(
             url=request.url,
-            #key="", # Use frontier default
-            #metadata={'key': ["values"]}
+            key=None, # Use frontier default
+            metadata={'key': md_example}
         )
-        uf_request = DiscoveredURLItem(info=urlinfo)
+        uf_request = URLItem(discovered=DiscoveredURLItem(info=urlinfo))
         return self._PutURLs(uf_request)
 
 
@@ -113,10 +114,10 @@ class URLFrontierScheduler():
         # Ask for a single URL:
         uf_request = GetParams(max_urls_per_queue=1, max_queues=1)
         for uf_response in self._stub.GetURLs(uf_request):
-            print("recv from server(%d), message=%s" %
-              (uf_response.server_id, uf_response.response_data))
-              # TODO Convert URLInfo into a Request
-              # and return it
+            print("recv from server(%s), message=%s" % (uf_response.url, uf_response.metadata))
+            # TODO Convert URLInfo into a Request
+            # and return it
+            return Request(url=uf_response.url)
 
         return None
 
@@ -124,18 +125,16 @@ class URLFrontierScheduler():
     def _record_response(self, response, request, spider):
         ### Signal handler to record downloader outcomes
         # https://docs.scrapy.org/en/latest/topics/signals.html#response-downloaded
-        # TODO Convert Response to KnownURLItem
+        # Convert Response to KnownURLItem
         urlinfo = URLInfo(
-            url="",
-            key="",
-            metadata={'key': ["values"]}
+            url=request.url
         )
-        uf_request = KnownURLItem(info=urlinfo, refetchable_from_date=0)
+        uf_request = URLItem(known=KnownURLItem(info=urlinfo, refetchable_from_date=0))
         return self._PutURLs(uf_request)
 
     def _PutURLs(self, uf_request):
         for uf_response in self._stub.PutURLs(iter([uf_request])):
-            print("recv from server(%d), message=%s" %
-              (uf_response.server_id, uf_response.response_data))
+            print("recv from server(%s), message=%s" %
+              (uf_response.value, str(uf_response)))
               # TODO ack
             return True

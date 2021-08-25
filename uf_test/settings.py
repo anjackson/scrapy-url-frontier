@@ -14,7 +14,7 @@ NEWSPIDER_MODULE = 'uf_test.spiders'
 
 # Define the scheduler that hooks into the URL Frontier:
 SCHEDULER='urlfrontier.scheduler.URLFrontierScheduler'
-SCHEDULER_URLFRONTIER_ENDPOINT='localhost:7071'
+SCHEDULER_URLFRONTIER_ENDPOINT='127.0.0.1:7071'
 
 # Crawl responsibly by identifying yourself (and your website) on the user-agent
 #USER_AGENT = 'uf_test (+http://www.yourdomain.com)'
