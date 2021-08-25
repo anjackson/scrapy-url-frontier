@@ -1,3 +1,6 @@
+import time
+import codecs
+import pickle
 from typing import Optional, Type, TypeVar
 from twisted.internet.defer import Deferred
 
@@ -92,13 +95,20 @@ class URLFrontierScheduler():
         """
         # TODO Convert Request to URLInfo
         print("Enqueuing "+ str(request) + " " + request.url)
-        md_example = StringList(values=["values"])
+
+        # TODO Replace with simpler encoding of subset of fields:
+        #scrapy_request = pickled = codecs.encode(pickle.dumps(request), "base64").decode()
+        
         urlinfo = URLInfo(
             url=request.url,
             key=None, # Use frontier default
-            metadata={'key': md_example}
+            #metadata={'scrapy_request': StringList(values=[scrapy_request])}
         )
-        uf_request = URLItem(discovered=DiscoveredURLItem(info=urlinfo))
+        if request.dont_filter:
+            now_ts = int(time.time())
+            uf_request = URLItem(known=KnownURLItem(info=urlinfo, refetchable_from_date=now_ts))
+        else:
+            uf_request = URLItem(discovered=DiscoveredURLItem(info=urlinfo))
         return self._PutURLs(uf_request)
 
 
@@ -114,10 +124,14 @@ class URLFrontierScheduler():
         # Ask for a single URL:
         uf_request = GetParams(max_urls_per_queue=1, max_queues=1)
         for uf_response in self._stub.GetURLs(uf_request):
-            print("recv from server(%s), message=%s" % (uf_response.url, uf_response.metadata))
-            # TODO Convert URLInfo into a Request
+            print("recv request from URL Frontier url=%s, metadata=%s" % (uf_response.url, uf_response.metadata))
+            # Convert URLInfo into a Request
             # and return it
-            return Request(url=uf_response.url)
+            if 'scrapy_request' in uf_response.metadata:
+                scrapy_request = uf_response.metadata['scrapy_request'].values[0]
+                return pickle.loads(codecs.decode(scrapy_request.encode(), "base64"))
+            else:
+                return Request(url=uf_response.url)
 
         return None
 
@@ -125,6 +139,7 @@ class URLFrontierScheduler():
     def _record_response(self, response, request, spider):
         ### Signal handler to record downloader outcomes
         # https://docs.scrapy.org/en/latest/topics/signals.html#response-downloaded
+        print("Recording response...")
         # Convert Response to KnownURLItem
         urlinfo = URLInfo(
             url=request.url
@@ -134,7 +149,7 @@ class URLFrontierScheduler():
 
     def _PutURLs(self, uf_request):
         for uf_response in self._stub.PutURLs(iter([uf_request])):
-            print("recv from server(%s), message=%s" %
+            print("recv from PUT url=%s, message=%s" %
               (uf_response.value, str(uf_response)))
               # TODO ack
             return True

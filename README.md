@@ -24,41 +24,22 @@ Then ran a simple spider with:
 
     scrapy crawl example
 
-The crawler attempts to enqueue the start URL, but the URL Frontier is unhappy:
+The crawl runs at this point, and because `allowed_domains` is unset, quickly widens in scope to cover a number of hosts.
 
-```
-SEVERE: Exception while executing runnable io.grpc.internal.ServerImpl$JumpToApplicationThreadServerStreamListener$1MessagesAvailable@352d3e9
-io.grpc.StatusRuntimeException: INTERNAL: Invalid protobuf byte sequence
-	at io.grpc.Status.asRuntimeException(Status.java:526)
-	at io.grpc.protobuf.lite.ProtoLiteUtils$MessageMarshaller.parse(ProtoLiteUtils.java:218)
-	at io.grpc.protobuf.lite.ProtoLiteUtils$MessageMarshaller.parse(ProtoLiteUtils.java:118)
-	at io.grpc.MethodDescriptor.parseRequest(MethodDescriptor.java:307)
-	at io.grpc.internal.ServerCallImpl$ServerStreamListenerImpl.messagesAvailableInternal(ServerCallImpl.java:309)
-	at io.grpc.internal.ServerCallImpl$ServerStreamListenerImpl.messagesAvailable(ServerCallImpl.java:292)
-	at io.grpc.internal.ServerImpl$JumpToApplicationThreadServerStreamListener$1MessagesAvailable.runInContext(ServerImpl.java:765)
-	at io.grpc.internal.ContextRunnable.run(ContextRunnable.java:37)
-	at io.grpc.internal.SerializingExecutor.run(SerializingExecutor.java:123)
-	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1128)
-	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:628)
-	at java.base/java.lang.Thread.run(Thread.java:829)
-Caused by: com.google.protobuf.InvalidProtocolBufferException: Protocol message end-group tag did not match expected tag.
-	at com.google.protobuf.InvalidProtocolBufferException.invalidEndTag(InvalidProtocolBufferException.java:129)
-	at com.google.protobuf.CodedInputStream$ArrayDecoder.checkLastTagWas(CodedInputStream.java:636)
-	at com.google.protobuf.CodedInputStream$ArrayDecoder.readMessage(CodedInputStream.java:890)
-	at crawlercommons.urlfrontier.Urlfrontier$DiscoveredURLItem.<init>(Urlfrontier.java:10474)
-	at crawlercommons.urlfrontier.Urlfrontier$DiscoveredURLItem.<init>(Urlfrontier.java:10427)
-	at crawlercommons.urlfrontier.Urlfrontier$DiscoveredURLItem$1.parsePartialFrom(Urlfrontier.java:11011)
-	at crawlercommons.urlfrontier.Urlfrontier$DiscoveredURLItem$1.parsePartialFrom(Urlfrontier.java:11005)
-	at com.google.protobuf.CodedInputStream$ArrayDecoder.readMessage(CodedInputStream.java:889)
-	at crawlercommons.urlfrontier.Urlfrontier$URLItem.<init>(Urlfrontier.java:7601)
-	at crawlercommons.urlfrontier.Urlfrontier$URLItem.<init>(Urlfrontier.java:7553)
-	at crawlercommons.urlfrontier.Urlfrontier$URLItem$1.parsePartialFrom(Urlfrontier.java:8445)
-	at crawlercommons.urlfrontier.Urlfrontier$URLItem$1.parsePartialFrom(Urlfrontier.java:8439)
-	at com.google.protobuf.AbstractParser.parseFrom(AbstractParser.java:86)
-	at com.google.protobuf.AbstractParser.parseFrom(AbstractParser.java:48)
-	at io.grpc.protobuf.lite.ProtoLiteUtils$MessageMarshaller.parseFrom(ProtoLiteUtils.java:223)
-	at io.grpc.protobuf.lite.ProtoLiteUtils$MessageMarshaller.parse(ProtoLiteUtils.java:215)
-	... 10 more
-```
+If the crawl it killed and restarted, the crawl will continue to get the URLs that were discovered but not crawled.
+
+But the crawl will not make a full restart, i.e. the URL Frontier acts as a dupe filter. However, seed URLs get marked as `dont_filter` and this is implemented here as allowing immediate recrawl, so seeds will be re-fetched on restarts.
+
+So, it basically works, but will require much more work to function properly.  This includes (at least):
+
+- [ ] Map any important properties and metadata from Scrapy's `Request` class to `URLInfo.metadata` and back again (see notes below).
+- [ ] Decide how to handle URL canonicalization.
+- [x] Consider supporting `dont_filter` by enqueuing those URLs as `KnownURLItem` instances with the `refetchable_from_date` set appropriately. (n.b. "The default implementation [of start_requests()] generates Request(url, dont_filter=True) for each url in start_urls.")
+- [ ] Setup the full via-WARC-writing-proxy Docker Stack.
+- [ ] Check `crawl-delay` works, i.e. is it handled in Scrapy, or do we need to be using `SetDelay` somehow?
+- [ ] Consider schemes to partition queues across multiple instances of Scrapy. i.e. if a Scrapy knows it is Scrapy 1 of 10, then periodically list the queues and assign a stable subset to each Scrapy (e.g. hash the queue keys and distribute those - as we did for Kafka+H3).
+- [ ] Consider making use of the URL Frontier support for additional stats.
+- [ ] Add a Prometheus endpoint to the URL Frontier service.
 
 
+Serialisation is an interesting issue. The `Request` can have hooks to Callable functions, and even to thread locks, so can't be pickled as-is.  We can follow Frontera's lead and [just keep the critical elements](https://github.com/scrapinghub/frontera/blob/84f9e1034d2868447db88e865596c0fbb32e70f6/frontera/contrib/backends/remote/codecs/json.py#L58-L63) (while noting that `dont_filter` is not included at present, may be missing `formdata` or `data` from form or JSON requests). But we must note that this will drop any callbacks attached to specific requests (the same as for Frontera, so presumable this is fine).
