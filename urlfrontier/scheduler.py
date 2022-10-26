@@ -13,8 +13,8 @@ from scrapy.utils.job import job_dir
 from scrapy.utils.misc import create_instance, load_object
 
 import grpc
-from urlfrontier_pb2_grpc import URLFrontierStub
-from urlfrontier_pb2 import GetParams, URLInfo, URLItem, DiscoveredURLItem, KnownURLItem, StringList
+from urlfrontier.grpc.urlfrontier_pb2_grpc import URLFrontierStub
+from urlfrontier.grpc.urlfrontier_pb2 import GetParams, URLInfo, URLItem, DiscoveredURLItem, KnownURLItem, StringList
 
 #class URLFrontierScheduler(BaseScheduler):
 # BaseScheduler appears not to be release yet...
@@ -125,7 +125,10 @@ class URLFrontierScheduler():
         calling ``next_request`` until ``has_pending_requests`` is ``False``.
         """
         # Ask for a single URL:
-        uf_request = GetParams(max_urls_per_queue=1, max_queues=1)
+        uf_request = GetParams(
+            max_urls_per_queue=1, 
+            max_queues=1, 
+            delay_requestable=60*60) # FIXME This is hard-coded!
         for uf_response in self._stub.GetURLs(uf_request):
             self._logger.debug("GetURLs rx url=%s, metadata=%s" % (uf_response.url, uf_response.metadata))
             # Convert URLInfo into a Request
@@ -152,6 +155,7 @@ class URLFrontierScheduler():
 
     def _PutURLs(self, uf_request):
         for uf_response in self._stub.PutURLs(iter([uf_request])):
-            self._logger.debug("PutURL url=%s OK" % (uf_response.value))
+            # Status 0 OK, 1 Skipped, 2 FAILED
+            self._logger.debug("PutURL ID=%s Status=%i" % (uf_response.ID, uf_response.status))
             return True
         return False

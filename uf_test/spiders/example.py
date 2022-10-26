@@ -5,8 +5,8 @@ from scrapy.linkextractors import LinkExtractor
 
 class ExampleSpider(scrapy.Spider):
     name = 'example'
-    allowed_domains = ['example.com']
-    start_urls = ['http://example.com/']
+    allowed_domains = ['anjackson.net']
+    start_urls = ['http://anjackson.net/']
 
     link_extractor = LinkExtractor()
 
