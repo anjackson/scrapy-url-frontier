@@ -1,0 +1,13 @@
+version: "3"
+
+services:
+
+  urlfrontier:
+    image: crawlercommons/url-frontier:2.3
+    command: -s 9100 rocksdb.path=/storage/rocksdb
+    ports:
+      - "7071:7071"
+      - "9100:9100"   
+    volumes:
+      - ./docker-urlfrontier-storage:/storage
+

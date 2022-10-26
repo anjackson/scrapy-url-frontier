@@ -75,4 +75,5 @@ Traceback (most recent call last):
   File "/Users/anj/Documents/workspace/scrapy-url-frontier/venv/lib/python3.9/site-packages/frontera/core/manager.py", line 798, in send
     self._queue.schedule([(request.meta[b'fingerprint'], score, request, not dont_queue)])
 AttributeError: 'NoneType' object has no attribute 'schedule'
-```
+```curl -o urlfrontier/grpc/urlfrontier.proto https://raw.githubusercontent.com/crawler-commons/url-frontier/2.3/API/urlfrontier.proto
+python -m grpc_tools.protoc -I . --python_out=. --grpc_python_out=. urlfrontier/grpc/urlfrontier.proto
