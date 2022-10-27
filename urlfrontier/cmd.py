@@ -93,8 +93,7 @@ def main():
                 max_queues = 0,
                 key = "",
                 delay_requestable = 1,
-                anyCrawlID = None, # What does this do?
-                crawlID = None,
+                #crawlID = None, # Equivalent to anyCrawlID=AnyCrawlID()?
             )
             print(g)
             for uf_response in stub.GetURLs(g):
