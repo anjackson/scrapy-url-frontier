@@ -6,23 +6,20 @@ Just attempting to test integration with URL Frontier.
 Steps Taken
 -----------
 
-Build and run the URL Frontier
+Build and run the URL Frontier, as per the instructions. Or, use the supplied Docker Compose file:
 
-    mvn install
-    cd service
-    java -cp target/urlfrontier-service-0.4-SNAPSHOT.jar crawlercommons.urlfrontier.service.URLFrontierServer
-
-In another terminal...
+    docker compose up urlfrontier
 
 In another terminal...
 
     sudo apt-get install libffi-dev
 
-Set up a virtualenv and installed all requirements (`scrapy`, `grpc` and `grpc-tools`).
+Set up a virtualenv and installed all requirements (`scrapy`, `scrapy-playwright`, `grpc` and `grpc-tools`).
 
 Generated stubs with:
 
-    python -m grpc_tools.protoc -I. --python_out=. --grpc_python_out=. urlfrontier.proto
+    curl -o urlfrontier/grpc/urlfrontier.proto https://raw.githubusercontent.com/crawler-commons/url-frontier/2.3/API/urlfrontier.proto
+    python -m grpc_tools.protoc -I . --python_out=. --grpc_python_out=. urlfrontier/grpc/urlfrontier.proto
 
 Then ran a simple spider with:
 
@@ -30,7 +27,7 @@ Then ran a simple spider with:
 
 The crawl runs at this point, and because `allowed_domains` is unset, quickly widens in scope to cover a number of hosts.
 
-If the crawl it killed and restarted, the crawl will continue to get the URLs that were discovered but not crawled.
+If the crawl is killed and restarted, the crawl will continue to get the URLs that were discovered but not crawled.
 
 But the crawl will not make a full restart, i.e. the URL Frontier acts as a dupe filter. However, seed URLs get marked as `dont_filter` and this is implemented here as allowing immediate recrawl, so seeds will be re-fetched on restarts.
 
@@ -39,7 +36,7 @@ So, it basically works, but will require much more work to function properly.  T
 - [x] Consider implementing as a [Frontera](https://frontera.readthedocs.io/) [back-end](https://frontera.readthedocs.io/en/latest/topics/frontier-backends.html) - this will handle a lot of the management logic around encoding properties, stats, etc. but is more complex to implement
 - [x] Map any important properties and metadata from Scrapy's `Request` class to `URLInfo.metadata` and back again (see notes below).
 - [x] Consider supporting `dont_filter` by enqueuing those URLs as `KnownURLItem` instances with the `refetchable_from_date` set appropriately. (n.b. "The default implementation [of start_requests()] generates Request(url, dont_filter=True) for each url in start_urls.")
-- [ ] Decide how to handle URL canonicalization.
+- [ ] Decide how to handle URL canonicalization: propose canonicalising the URL key but leaving the `scrapy-request` URL unchanged.
 - [ ] Check `crawl-delay` works, i.e. is it handled in Scrapy, or do we need to be using `SetDelay` somehow?
 - [ ] Setup the full via-WARC-writing-proxy Docker Stack.
 - [ ] Consider schemes to partition queues across multiple instances of Scrapy. i.e. if a Scrapy knows it is Scrapy 1 of 10, then periodically list the queues and assign a stable subset to each Scrapy (e.g. hash the queue keys and distribute those - as we did for Kafka+H3).
@@ -82,5 +79,24 @@ AttributeError: 'NoneType' object has no attribute 'schedule'
 ```
 
 
-curl -o urlfrontier/grpc/urlfrontier.proto https://raw.githubusercontent.com/crawler-commons/url-frontier/2.3/API/urlfrontier.proto
-python -m grpc_tools.protoc -I . --python_out=. --grpc_python_out=. urlfrontier/grpc/urlfrontier.proto
+
+
+
+## Notes on how the different parts work
+
+URLFrontier implements crawl delay and deduplication, but not canonicalisation or any kind of filtering including robots.txt (see [here](https://github.com/crawler-commons/url-frontier/tree/master/API#out-of-scope)). The default crawl delay for each queue is one second (see [here](https://github.com/crawler-commons/url-frontier/blob/1b6c2ec4b14cff24810c718103eca16c8fa17d48/service/src/main/java/crawlercommons/urlfrontier/service/AbstractFrontierService.java#L118)).
+
+Scrapy implements deduplication and canonicalisation via [request fingerprinting](https://docs.scrapy.org/en/latest/topics/request-response.html#request-fingerprints). It uses an internal [slot system to implement crawl delays](https://github.com/scrapy/scrapy/blob/master/scrapy/core/downloader/__init__.py#L140). And various kinds of filtering is supported, including [obeying robot.txt](https://docs.scrapy.org/en/latest/_modules/scrapy/downloadermiddlewares/robotstxt.html#RobotsTxtMiddleware) amd [OffsetMiddleware](https://docs.scrapy.org/en/latest/topics/spider-middleware.html#module-scrapy.spidermiddlewares.offsite) as part of the standard setup.
+
+So, when integrating Scrapy with URLFrontier, how this works depends on the integration pattern. If we can't consistently route queues, then we could shift to relying on URLFrontier to manage crawl delays, but each Scrapy spider would have to fetch it's own copy of robots.txt.
+
+But if we can consistently route queues to the same Scrapy spider instances, then we can set the URLFrontier delay to e.g. 0 and let Scrapy handle delays and caching robots.txt etc. This seems a more sensible approach.
+
+To make this work, there are a few different approaches. If we want to avoid adding more components, the current URLFrontier offers a couple of possible tactics.
+
+One would be for each spider to regularly list all queues, and knowing that it is spider _x_ of _N_, allocate a subset of the queues to itself. It would then only run `GetURLs` for those queues.  This would be quite nice, but because we can use partial queue matches, each queue would need a separate `GetURLs` call. So this scales poorly.
+
+A more scalable alternative is to pre-partition the crawl using separate crawl IDs. If the crawl is called `domain_scan` we can define _P_ partitions and create crawl IDs like `domain_scan_1`, `domain_scan_2`, `domain_scan_3` ... Each _x/N_ spider would then allocate itself to one or more crawl partiions, with the simplest arrangement being _P=N_ i.e. one crawl partition per spider.  This should work fine, but if the number of partitions/spiders needs to be changed, it may be necessary to drain and re-partition the frontier.
+
+
+

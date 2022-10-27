@@ -10,7 +10,7 @@ import argparse
 
 import grpc
 from urlfrontier.grpc.urlfrontier_pb2_grpc import URLFrontierStub
-from urlfrontier.grpc.urlfrontier_pb2 import GetParams, URLInfo, URLItem, DiscoveredURLItem, KnownURLItem, StringList, QueueWithinCrawlParams, Pagination
+from urlfrontier.grpc.urlfrontier_pb2 import AnyCrawlID, GetParams, URLInfo, URLItem, DiscoveredURLItem, KnownURLItem, StringList, QueueWithinCrawlParams, Pagination, Local
 
 logging.basicConfig(level=logging.WARNING, format='%(asctime)s: %(levelname)s - %(name)s - %(message)s')
 
@@ -38,6 +38,13 @@ def main():
         parents=[common_parser])
     #parser_getstats.add_argument('id', type=str, help='The record ID to look up, or "-" to read a list of IDs from STDIN.')
 
+
+    # Add a parser a subcommand:
+    parser_listcrawlss = subparsers.add_parser(
+        'list-crawls', 
+        help='List crawls known to the URLFrontier.',
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        parents=[common_parser])
 
     # Add a parser a subcommand:
     parser_listqueues = subparsers.add_parser(
@@ -87,13 +94,17 @@ def main():
             )
             queues = stub.ListQueues(p)
             print(queues)
+        elif args.op == 'list-crawls':
+            crawls = stub.ListCrawls(Local(local=False))
+            print(crawls)
         elif args.op == 'list-urls':
             g = GetParams(
-                max_urls_per_queue = 0,
+                max_urls_per_queue = 100,
                 max_queues = 0,
-                key = "",
                 delay_requestable = 1,
-                #crawlID = None, # Equivalent to anyCrawlID=AnyCrawlID()?
+                #key = "example.com",
+                #crawlID = "", # Needed if querying a specific queue key, otherwise:
+                anyCrawlID = AnyCrawlID()
             )
             print(g)
             for uf_response in stub.GetURLs(g):
