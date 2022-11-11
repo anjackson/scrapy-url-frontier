@@ -15,7 +15,7 @@ NEWSPIDER_MODULE = 'uf_test.spiders'
 # Define the scheduler that hooks into the URL Frontier:
 SCHEDULER='urlfrontier.scheduler.URLFrontierScheduler'
 SCHEDULER_URLFRONTIER_ENDPOINT='127.0.0.1:7071'
-SCHEDULER_URLFRONTIER_CODEC='frontera.contrib.backends.remote.codecs.json'
+#SCHEDULER_URLFRONTIER_CODEC='frontera.contrib.backends.remote.codecs.json'
 
 # Use (incomplete) implementation as Frontera back-end:
 #SPIDER_MIDDLEWARES = {

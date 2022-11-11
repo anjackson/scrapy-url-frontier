@@ -10,11 +10,18 @@ import grpc
 
 from scrapy.http.request import Request
 
-from urlfrontier_pb2_grpc import URLFrontierStub
-from urlfrontier_pb2 import GetParams, URLInfo, URLItem, DiscoveredURLItem, KnownURLItem, StringList
+from urlfrontier.grpc.urlfrontier_pb2_grpc import URLFrontierStub
+from urlfrontier.grpc.urlfrontier_pb2 import GetParams, URLInfo, URLItem, DiscoveredURLItem, KnownURLItem, StringList
 
 
 class URLFrontierBackend(Backend):
+    """
+    This is an experimental and incomplete implementation of a Frontera back-end that
+    uses URL-Frontier rather than e.g. HBase.
+
+    It is not ready to use and it not presently under development.
+    """
+
     def __init__(self, manager):
         settings = manager.settings
         self.endpoint = settings.get('FRONTERA_URLFRONTIER_ENDPOINT', 'localhost:7071')
