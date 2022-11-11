@@ -23,8 +23,11 @@ def main():
     # Common arguments:
     common_parser = argparse.ArgumentParser(add_help=False)
     common_parser.add_argument('-v', '--verbose',  action='count', default=0, help='Logging level; add more -v for more logging.')
-
     common_parser.add_argument('-u', '--urlfrontier-endpoint', type=str, help='The URLFrontier instance to talk to.', required=True)
+
+    queue_parser = argparse.ArgumentParser(add_help=False)
+    queue_parser.add_argument('-C', '--crawl-id', default="DEFAULT", help="The CrawlID to use.")
+    queue_parser.add_argument('-q', '--queue', required=True, help="Key for the crawl queue, e.g. 'example.com'.")
 
     # Use sub-parsers for different operations:
     subparsers = parser.add_subparsers(dest="op")
@@ -54,7 +57,14 @@ def main():
         parents=[common_parser])
 
     # Add a parser a subcommand:
-    parser_listqueues = subparsers.add_parser(
+    parser_delqueue = subparsers.add_parser(
+        'delete-queue', 
+        help='Delete a queue from the URLFrontier',
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        parents=[common_parser, queue_parser])
+
+    # Add a parser a subcommand:
+    parser_listurls = subparsers.add_parser(
         'list-urls', 
         help='List URLs from the URLFrontier (with delay_requestable=0 so this does not interfere with the crawl).',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -109,8 +119,24 @@ def main():
             print(g)
             for uf_response in stub.GetURLs(g):
                 logger.warn("GetURLs rx url=%s, metadata=%s" % (uf_response.url, uf_response.metadata))
+        elif args.op == 'put-urls':
+            raise Exception("Unimplemented operation " + args.op)
+        elif args.op == 'get-active':
+            raise Exception("Unimplemented operation " + args.op)
+        elif args.op == 'set-active':
+            raise Exception("Unimplemented operation " + args.op)
+        elif args.op == 'delete-queue':
+            queue = args.queue
+            crawlID = args.crawl_id
+            d = QueueWithinCrawlParams(
+                key = queue,
+                crawlID = crawlID,
+                local=False,
+            )
+            deleted = stub.DeleteQueue(d)
+            print(f"Deleted {deleted.value} URLs from queue {queue} of crawl {crawlID}.")
         else:
-            raise Exception("Unrecognised operation " + args.op)
+            raise Exception("Unrecognized operation " + args.op)
 
 if __name__ == "__main__":
     main()
