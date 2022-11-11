@@ -20,7 +20,7 @@ from urlfrontier.grpc.urlfrontier_pb2_grpc import URLFrontierStub
 from urlfrontier.grpc.urlfrontier_pb2 import GetParams, URLInfo, URLItem, DiscoveredURLItem, KnownURLItem, StringList
 
 #  Convert Request to URLInfo
-def request_to_urlInfo(request: Request, queue=None, encoder=None, keep_fragments=False):
+def request_to_urlInfo(request: Request, crawlID="DEFAULT", queue=None, encoder=None, keep_fragments=False):
 
     # Canonicalize the URL for the unique key:
     canon_url = canonicalize_url(request.url, keep_fragments=keep_fragments)
@@ -31,8 +31,9 @@ def request_to_urlInfo(request: Request, queue=None, encoder=None, keep_fragment
         return URLInfo(
             # URLs placed in canonical form to avoid duplicate requests:
             url=canon_url,
-            # queue=None means frontier default queue key
+            # key=None means frontier default queue key
             key=queue, 
+            crawlID=crawlID,
             metadata={'scrapy_request': StringList(values=[encoded_request])}
         )
     else:
@@ -44,6 +45,7 @@ def request_to_urlInfo(request: Request, queue=None, encoder=None, keep_fragment
             url=canon_url,
             # queue=None means frontier default queue key
             key=queue,
+            crawlID=crawlID,
             metadata=metadata
         )
 
@@ -85,6 +87,7 @@ class URLFrontierScheduler():
         self.crawler = crawler
         self.default_delay_requestable = crawler.settings.getint('DEFAULT_DELAY_REQUESTABLE', 10*60*60)
         self._logger = logging.getLogger("urlfrontier-scheduler")
+        self.crawlID = crawler.settings.get('SCHEDULER_URLFRONTIER_CRAWLID', None)
         # Set up codec:
         codec_path = crawler.settings.get('SCHEDULER_URLFRONTIER_CODEC', None)
         if codec_path is not None:
@@ -121,6 +124,8 @@ class URLFrontierScheduler():
         """
         self._channel = grpc.insecure_channel(self.endpoint)
         self._stub = URLFrontierStub(self._channel)
+        # Override the 1s defaultDelayForQueues:
+        # FIXME Call SetDelay(QueueDelayParams())
 
 
     def close(self, reason: str) -> Optional[Deferred]:
@@ -155,7 +160,7 @@ class URLFrontierScheduler():
         request is rejected by the dupefilter.
         """
         self._logger.info("PutURL request=" + str(request))
-        urlInfo = request_to_urlInfo(request, encoder=self._encoder)
+        urlInfo = request_to_urlInfo(request, encoder=self._encoder, crawlID=self.crawlID)
         if request.dont_filter:
             now_ts = int(time.time())
             uf_request = URLItem(known=KnownURLItem(info=urlInfo, refetchable_from_date=now_ts))
@@ -177,7 +182,9 @@ class URLFrontierScheduler():
         uf_request = GetParams(
             max_urls_per_queue=1, 
             max_queues=1, 
-            delay_requestable=self.default_delay_requestable)
+            delay_requestable=self.default_delay_requestable,
+            crawlID = self.crawlID
+            )
         for uf_response in self._stub.GetURLs(uf_request):
             self._logger.debug("GetURLs rx url=%s, metadata=%s" % (uf_response.url, uf_response.metadata))
             # Convert URLInfo into a Request
@@ -192,7 +199,7 @@ class URLFrontierScheduler():
         # https://docs.scrapy.org/en/latest/topics/signals.html#response-downloaded
         self._logger.debug(f"Recording crawl outcome request={request} response={response}")
         # Convert Response to KnownURLItem
-        urlInfo = request_to_urlInfo(request, encoder=self._encoder)
+        urlInfo = request_to_urlInfo(request, crawlID=self.crawlID, encoder=self._encoder)
         uf_request = URLItem(known=KnownURLItem(info=urlInfo, refetchable_from_date=0))
         return self._PutURLs(uf_request)
 
