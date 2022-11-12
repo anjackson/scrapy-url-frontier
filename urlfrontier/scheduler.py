@@ -17,7 +17,7 @@ from scrapy.utils.misc import create_instance, load_object
 
 import grpc
 from urlfrontier.grpc.urlfrontier_pb2_grpc import URLFrontierStub
-from urlfrontier.grpc.urlfrontier_pb2 import GetParams, URLInfo, URLItem, DiscoveredURLItem, KnownURLItem, StringList
+from urlfrontier.grpc.urlfrontier_pb2 import GetParams, URLInfo, URLItem, DiscoveredURLItem, KnownURLItem, StringList, QueueDelayParams
 
 #  Convert Request to URLInfo
 def request_to_urlInfo(request: Request, crawlID="DEFAULT", queue=None, encoder=None, keep_fragments=False):
@@ -64,7 +64,7 @@ def urlInfo_to_request(uf: URLInfo, decoder=None):
 class URLFrontierScheduler():
     """
 
-    DEFAULT_DELAY_REQUESTABLE
+    SCHEDULER_URLFRONTIER_DEFAULT_DELAY_REQUESTABLE
 
     The time (in seconds) to wait before the URL Frontier is allowed to send a given URL out again to re-try to crawl it.
     This is set to a long period (10 minutes), as it should only be relevant in cases where the spider crashes.
@@ -85,10 +85,11 @@ class URLFrontierScheduler():
         self.debug=crawler.settings.getbool('SCHEDULER_DEBUG')
         self.stats = crawler.stats
         self.crawler = crawler
-        self.default_delay_requestable = crawler.settings.getint('DEFAULT_DELAY_REQUESTABLE', 10*60*60)
-        self._logger = logging.getLogger("urlfrontier-scheduler")
+        self.default_delay_requestable = crawler.settings.getint('SCHEDULER_URLFRONTIER_DEFAULT_DELAY_REQUESTABLE', 10*60*60)
+        self.max_queues = crawler.settings.getint('SCHEDULER_URLFRONTIER_GETURLS_MAX_QUEUES', 10)
         self.crawlID = crawler.settings.get('SCHEDULER_URLFRONTIER_CRAWLID', None)
-        # Set up codec:
+        self._logger = logging.getLogger("urlfrontier-scheduler")
+        # Set up codec (supporting Frontera codecs):
         codec_path = crawler.settings.get('SCHEDULER_URLFRONTIER_CODEC', None)
         if codec_path is not None:
             decoder_cls = load_object(codec_path+".Decoder")
@@ -125,7 +126,14 @@ class URLFrontierScheduler():
         self._channel = grpc.insecure_channel(self.endpoint)
         self._stub = URLFrontierStub(self._channel)
         # Override the 1s defaultDelayForQueues:
-        # FIXME Call SetDelay(QueueDelayParams())
+        self._stub.SetDelay(
+            QueueDelayParams(
+                key=None,
+                crawlID=self.crawlID, # Seems this MUST be set
+                delay_requestable=1,
+                local=False,
+            )
+        )
 
 
     def close(self, reason: str) -> Optional[Deferred]:
@@ -159,14 +167,18 @@ class URLFrontierScheduler():
         For reference, the default Scrapy scheduler returns ``False`` when the
         request is rejected by the dupefilter.
         """
-        self._logger.info("PutURL request=" + str(request))
         urlInfo = request_to_urlInfo(request, encoder=self._encoder, crawlID=self.crawlID)
+        self.crawler.stats.inc_value('urlfrontier/enqueue_request_count')
         if request.dont_filter:
             now_ts = int(time.time())
             uf_request = URLItem(known=KnownURLItem(info=urlInfo, refetchable_from_date=now_ts))
+            self.crawler.stats.inc_value('urlfrontier/enqueue_request_count/dont_filter')
+            self._logger.info("PutURL dont_filter request=" + str(request))
+            return self._PutURLs(uf_request, "known_dont_filter")
         else:
             uf_request = URLItem(discovered=DiscoveredURLItem(info=urlInfo))
-        return self._PutURLs(uf_request)
+            self._logger.info("PutURL request=" + str(request))
+            return self._PutURLs(uf_request, "discovered")
 
 
     def next_request(self) -> Optional[Request]:
@@ -178,17 +190,18 @@ class URLFrontierScheduler():
         to the downloader in the current reactor cycle. The engine will continue
         calling ``next_request`` until ``has_pending_requests`` is ``False``.
         """
-        # Ask for a single URL:
-        uf_request = GetParams(
-            max_urls_per_queue=1, 
-            max_queues=1, 
-            delay_requestable=self.default_delay_requestable,
+        # Ask for URLs, no more than one per queue:
+        g = GetParams(
+            max_urls_per_queue = 1,
+            max_queues = self.max_queues,
+            delay_requestable = self.default_delay_requestable,
+            #key = None,
             crawlID = self.crawlID
-            )
-        for uf_response in self._stub.GetURLs(uf_request):
+        )
+        for uf_response in self._stub.GetURLs(g):
             self._logger.debug("GetURLs rx url=%s, metadata=%s" % (uf_response.url, uf_response.metadata))
-            # Convert URLInfo into a Request
-            # and return it
+            self.crawler.stats.inc_value('urlfrontier/get_urls_count')            
+            # Convert URLInfo into a Request and return it
             return urlInfo_to_request(uf_response, decoder=self._decoder)
 
         return None
@@ -201,12 +214,21 @@ class URLFrontierScheduler():
         # Convert Response to KnownURLItem
         urlInfo = request_to_urlInfo(request, crawlID=self.crawlID, encoder=self._encoder)
         uf_request = URLItem(known=KnownURLItem(info=urlInfo, refetchable_from_date=0))
-        return self._PutURLs(uf_request)
+        return self._PutURLs(uf_request, "known")
 
-    def _PutURLs(self, uf_request):
+    def _PutURLs(self, uf_request, urlInfoKind):
         for uf_response in self._stub.PutURLs(iter([uf_request])):
             # Status 0 OK, 1 Skipped, 2 FAILED
             self._logger.debug("PutURL ID=%s Status=%i" % (uf_response.ID, uf_response.status))
+            self.crawler.stats.inc_value(f'urlfrontier/put_urls_{urlInfoKind}_count')
+            if uf_response.status == 0:
+                self.crawler.stats.inc_value(f'urlfrontier/put_urls_{urlInfoKind}_count/ok')
+            elif uf_response.status == 1:
+                self.crawler.stats.inc_value(f'urlfrontier/put_urls_{urlInfoKind}_count/skipped')
+            elif uf_response.status == 2:
+                self.crawler.stats.inc_value(f'urlfrontier/put_urls_{urlInfoKind}_count/failed')
+                # FIXME Throw an exception in this case?
+                
             return True
         return False
 

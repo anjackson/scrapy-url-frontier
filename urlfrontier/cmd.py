@@ -80,6 +80,7 @@ def main():
         help='List URLs from the URLFrontier (with delay_requestable=0 so this does not interfere with the crawl).',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
         parents=[common_parser, crawlid_parser])
+    parser_listurls.add_argument('-q', '--queue', help="Key for the crawl queue to list URLs from, e.g. 'example.com'.")
 
     # And PARSE it:
     args = parser.parse_args()
@@ -131,7 +132,7 @@ def main():
                 max_urls_per_queue = 100,
                 max_queues = 0,
                 delay_requestable = 1,
-                #key = "example.com",
+                key = args.queue,
                 crawlID = args.crawl_id, # Needed if querying a specific queue key, otherwise:
                 #anyCrawlID = AnyCrawlID()
             )

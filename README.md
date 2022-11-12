@@ -10,6 +10,10 @@ Build and run the URL Frontier, as per the instructions. Or, use the supplied Do
 
     docker compose up urlfrontier
 
+Alternative to build...
+
+    docker build -t crawlercommons/url-frontier:master .
+
 In another terminal...
 
     sudo apt-get install libffi-dev
@@ -36,11 +40,11 @@ So, it basically works, but will require much more work to function properly.  T
 - [x] Consider implementing as a [Frontera](https://frontera.readthedocs.io/) [back-end](https://frontera.readthedocs.io/en/latest/topics/frontier-backends.html) - this will handle a lot of the management logic around encoding properties, stats, etc. but is more complex to implement
 - [x] Map any important properties and metadata from Scrapy's `Request` class to `URLInfo.metadata` and back again (see notes below).
 - [x] Consider supporting `dont_filter` by enqueuing those URLs as `KnownURLItem` instances with the `refetchable_from_date` set appropriately. (n.b. "The default implementation [of start_requests()] generates Request(url, dont_filter=True) for each url in start_urls.")
-- [ ] Canonicalize the URL key (which is used for de-dup) but leave the `scrapy-request` URL unchanged.
+- [x] Canonicalize the URL key (which is used for de-dup) but leave the `scrapy-request` URL unchanged.
 - [x] Check `crawl-delay` works, i.e. is it handled in Scrapy, or do we need to be using `SetDelay` somehow?
-- [ ] Setup the full via-WARC-writing-proxy Docker Stack.
+- [x] ~~Setup the full via-WARC-writing-proxy Docker Stack.~~ Doing that in a different project.
 - [x] Consider schemes to partition queues across multiple instances of Scrapy. i.e. if a Scrapy knows it is Scrapy 1 of 10, then periodically list the queues and assign a stable subset to each Scrapy (e.g. hash the queue keys and distribute those - as we did for Kafka+H3).
-- [ ] Consider making use of the URL Frontier support for additional stats.
+- [x] Add some internal Scrapy metrics/stats for the scheduler.
 - [x] ~~Add a Prometheus endpoint to the URL Frontier service.~~ Already exists!
 
 
