@@ -31,5 +31,6 @@ service-identity==21.1.0
 six==1.16.0
 Twisted==21.7.0
 typing-extensions==3.10.0.0
+uhashring==2.2
 w3lib==1.22.0
 zope.interface==5.4.0

@@ -13,3 +13,5 @@ class ExampleSpider(scrapy.Spider):
     def parse(self, response):
         for link in self.link_extractor.extract_links(response):
             yield Request(link.url, callback=self.parse)
+
+

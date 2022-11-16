@@ -20,7 +20,7 @@ from urlfrontier.grpc.urlfrontier_pb2_grpc import URLFrontierStub
 from urlfrontier.grpc.urlfrontier_pb2 import GetParams, URLInfo, URLItem, DiscoveredURLItem, KnownURLItem, StringList, QueueDelayParams
 
 #  Convert Request to URLInfo
-def request_to_urlInfo(request: Request, crawlID="DEFAULT", queue=None, encoder=None, keep_fragments=False):
+def request_to_urlInfo(request: Request, crawlID=None, queue=None, encoder=None, keep_fragments=False):
 
     # Canonicalize the URL for the unique key:
     canon_url = canonicalize_url(request.url, keep_fragments=keep_fragments)
@@ -87,7 +87,7 @@ class URLFrontierScheduler():
         self.crawler = crawler
         self.default_delay_requestable = crawler.settings.getint('SCHEDULER_URLFRONTIER_DEFAULT_DELAY_REQUESTABLE', 10*60*60)
         self.max_queues = crawler.settings.getint('SCHEDULER_URLFRONTIER_GETURLS_MAX_QUEUES', 10)
-        self.crawlID = crawler.settings.get('SCHEDULER_URLFRONTIER_CRAWLID', None)
+        self.spider_id= crawler.settings.get('SCHEDULER_URLFRONTIER_SPIDER_ID', None)
         self._logger = logging.getLogger("urlfrontier-scheduler")
         # Set up codec (supporting Frontera codecs):
         codec_path = crawler.settings.get('SCHEDULER_URLFRONTIER_CODEC', None)
@@ -129,7 +129,7 @@ class URLFrontierScheduler():
         self._stub.SetDelay(
             QueueDelayParams(
                 key=None,
-                crawlID=self.crawlID, # Seems this MUST be set
+                crawlID=self.spider_id, # Seems this MUST be set
                 delay_requestable=1,
                 local=False,
             )
@@ -167,7 +167,8 @@ class URLFrontierScheduler():
         For reference, the default Scrapy scheduler returns ``False`` when the
         request is rejected by the dupefilter.
         """
-        urlInfo = request_to_urlInfo(request, encoder=self._encoder, crawlID=self.crawlID)
+        urlInfo = request_to_urlInfo(request, encoder=self._encoder, 
+            crawlID=self._get_spider_id(request))
         self.crawler.stats.inc_value('urlfrontier/enqueue_request_count')
         if request.dont_filter:
             now_ts = int(time.time())
@@ -196,8 +197,9 @@ class URLFrontierScheduler():
             max_queues = self.max_queues,
             delay_requestable = self.default_delay_requestable,
             #key = None,
-            crawlID = self.crawlID
+            crawlID = self.spider_id
         )
+        self._logger.debug(f"Looking for URLs under crawlID = {self.spider_id}...")
         for uf_response in self._stub.GetURLs(g):
             self._logger.debug("GetURLs rx url=%s, metadata=%s" % (uf_response.url, uf_response.metadata))
             self.crawler.stats.inc_value('urlfrontier/get_urls_count')            
@@ -206,13 +208,27 @@ class URLFrontierScheduler():
 
         return None
 
+    def _get_spider_id(self, request):
+        # Default to this spider's ID:
+        spider_id = self.spider_id
+        
+        # Support setting the spider ID, like Scrapy Cluster
+        # See https://scrapy-cluster.readthedocs.io/en/latest/topics/crawler/controlling.html#inter-spider-communication
+        if 'spiderid' in request.meta:
+            spider_id = request.meta['spiderid']
+
+        self._logger.debug(f"Returning spider_id = {spider_id}")
+        return spider_id
+
 
     def _record_response(self, response, request, spider):
         ### Signal handler to record downloader outcomes
         # https://docs.scrapy.org/en/latest/topics/signals.html#response-downloaded
         self._logger.debug(f"Recording crawl outcome request={request} response={response}")
         # Convert Response to KnownURLItem
-        urlInfo = request_to_urlInfo(request, crawlID=self.crawlID, encoder=self._encoder)
+        urlInfo = request_to_urlInfo(request, 
+            crawlID=self._get_spider_id(request), 
+            encoder=self._encoder)
         uf_request = URLItem(known=KnownURLItem(info=urlInfo, refetchable_from_date=0))
         return self._PutURLs(uf_request, "known")
 

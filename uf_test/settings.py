@@ -12,6 +12,9 @@ BOT_NAME = 'uf_test'
 SPIDER_MODULES = ['uf_test.spiders']
 NEWSPIDER_MODULE = 'uf_test.spiders'
 
+REQUEST_FINGERPRINTER_IMPLEMENTATION = "2.7"
+LOG_LEVEL = "DEBUG"
+
 # Define the scheduler that hooks into the URL Frontier:
 SCHEDULER='urlfrontier.scheduler.URLFrontierScheduler'
 SCHEDULER_URLFRONTIER_ENDPOINT='127.0.0.1:7071'
@@ -62,9 +65,15 @@ DOWNLOAD_DELAY = 1
 
 # Enable or disable spider middlewares
 # See https://docs.scrapy.org/en/latest/topics/spider-middleware.html
-#SPIDER_MIDDLEWARES = {
-#    'uf_test.middlewares.UfTestSpiderMiddleware': 543,
-#}
+SPIDER_MIDDLEWARES = {
+    'urlfrontier.middlewares.HashRingDistributorSpiderMiddleware': 500,
+}
+
+# How many spiders are here, in total:
+HASH_RING_DISTRIBUTOR_NUM_SPIDERS = 2
+
+# Which spider is this? (Of 0..NUM_SPIDERS-1)
+SCHEDULER_URLFRONTIER_SPIDER_ID = "example-1"
 
 # Enable or disable downloader middlewares
 # See https://docs.scrapy.org/en/latest/topics/downloader-middleware.html
@@ -104,4 +113,3 @@ DOWNLOAD_DELAY = 1
 #HTTPCACHE_DIR = 'httpcache'
 #HTTPCACHE_IGNORE_HTTP_CODES = []
 #HTTPCACHE_STORAGE = 'scrapy.extensions.httpcache.FilesystemCacheStorage'
-
