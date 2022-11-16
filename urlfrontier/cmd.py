@@ -27,7 +27,7 @@ def main():
     # Common arguments:
     common_parser = argparse.ArgumentParser(add_help=False)
     common_parser.add_argument('-v', '--verbose',  action='count', default=0, help='Logging level; add more -v for more logging.')
-    common_parser.add_argument('-u', '--urlfrontier-endpoint', type=str, help='The URLFrontier instance to talk to.', required=True)
+    common_parser.add_argument('-u', '--urlfrontier-endpoint', type=str, help='The URLFrontier instance to talk to.', default='localhost:7071')
 
     crawlid_parser = argparse.ArgumentParser(add_help=False)
     crawlid_parser.add_argument('-C', '--crawl-id', default=None, help="The CrawlID to use.")
