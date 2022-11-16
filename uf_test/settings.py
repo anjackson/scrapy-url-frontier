@@ -69,11 +69,12 @@ SPIDER_MIDDLEWARES = {
     'urlfrontier.middlewares.HashRingDistributorSpiderMiddleware': 500,
 }
 
-# How many spiders are here, in total:
+# Spider Partition ID (format I/N meaning this is spider I of N spiders)
+SPIDER_PARTITION_ID="1/2"
 HASH_RING_DISTRIBUTOR_NUM_SPIDERS = 2
+SCHEDULER_URLFRONTIER_SPIDER_ID = "example-0"
+# Can override at runtime with additional args like `-s SPIDER_PARTITION_ID=5/5`
 
-# Which spider is this? (Of 0..NUM_SPIDERS-1)
-SCHEDULER_URLFRONTIER_SPIDER_ID = "example-1"
 
 # Enable or disable downloader middlewares
 # See https://docs.scrapy.org/en/latest/topics/downloader-middleware.html
