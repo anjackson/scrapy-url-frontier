@@ -54,9 +54,16 @@ def urlInfo_to_request(uf: URLInfo, decoder=None):
         encoded_request = uf.metadata['scrapy_request'].values[0]
         return decoder.decode_request(encoded_request)
     else:
-        original_url = uf.metadata['original_url'].values[0]
-        meta = json.loads(uf.metadata['meta'].values[0])
         # Override URL with metadata URL if set:
+        if 'original_url' in uf.metadata:
+            original_url = uf.metadata['original_url'].values[0]
+        else:
+            original_url = uf.url
+        if 'meta' in uf.metadata:
+            meta = json.loads(uf.metadata['meta'].values[0])
+        else:
+            meta = {}
+        # Build the Request object:
         return Request(url=original_url, meta=meta)
 
 #class URLFrontierScheduler(BaseScheduler):

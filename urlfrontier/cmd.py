@@ -8,9 +8,13 @@ import json
 import logging
 import argparse
 
+from scrapy.http.request import Request
+
 import grpc
 from urlfrontier.grpc.urlfrontier_pb2_grpc import URLFrontierStub
 from urlfrontier.grpc.urlfrontier_pb2 import AnyCrawlID, GetParams, URLInfo, URLItem, DiscoveredURLItem, KnownURLItem, StringList, QueueWithinCrawlParams, Pagination, Local, DeleteCrawlMessage
+
+from urlfrontier.scheduler import request_to_urlInfo, urlInfo_to_request
 
 logging.basicConfig(level=logging.WARNING, format='%(asctime)s: %(levelname)s - %(name)s - %(message)s')
 
@@ -82,6 +86,16 @@ def main():
         parents=[common_parser, crawlid_parser])
     parser_listurls.add_argument('-q', '--queue', help="Key for the crawl queue to list URLs from, e.g. 'example.com'.")
 
+    # Add a parser a subcommand:
+    parser_puturls = subparsers.add_parser(
+        'put-urls', 
+        help='Put URLs into the URLFrontier.',
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        parents=[common_parser, crawlid_parser])
+    parser_puturls.add_argument('-q', '--queue', help="Key for the crawl queue to add the URL(s) to. If unset, uses the host name.")
+    parser_puturls.add_argument('urls', help="URL to enqueue, or a filename to read URLs from, or '-' to read from STDIN.")
+
+
     # And PARSE it:
     args = parser.parse_args()
 
@@ -138,8 +152,19 @@ def main():
             )
             for uf_response in stub.GetURLs(g):
                 print("url=%s, metadata=%s" % (uf_response.url, uf_response.metadata))
+                request = urlInfo_to_request(uf_response)
+                print(request)
         elif args.op == 'put-urls':
-            raise Exception("Unimplemented operation " + args.op)
+            request = Request(args.urls)
+            urlInfo = request_to_urlInfo(request, 
+                crawlID=args.crawl_id, 
+                encoder=None)
+            #uf_request = URLItem(known=KnownURLItem(info=urlInfo, refetchable_from_date=0))
+            uf_request = URLItem(discovered=DiscoveredURLItem(info=urlInfo))
+            for uf_response in stub.PutURLs(iter([uf_request])):
+                # Status 0 OK, 1 Skipped, 2 FAILED
+                logger.debug("PutURL ID=%s Status=%i" % (uf_response.ID, uf_response.status))
+
         elif args.op == 'get-active':
             raise Exception("Unimplemented operation " + args.op)
         elif args.op == 'set-active':
