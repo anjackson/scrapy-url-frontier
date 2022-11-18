@@ -19,6 +19,9 @@ LOG_LEVEL = "DEBUG"
 SCHEDULER='urlfrontier.scheduler.URLFrontierScheduler'
 SCHEDULER_URLFRONTIER_ENDPOINT='127.0.0.1:7071'
 #SCHEDULER_URLFRONTIER_CODEC='frontera.contrib.backends.remote.codecs.json'
+# Spider Partition ID (format I/N meaning this is spider I of N spiders)
+#SPIDER_PARTITION_ID="1/2"
+# Can override at runtime with additional args like `-s SPIDER_PARTITION_ID=5/5`
 
 # Use (incomplete) implementation as Frontera back-end:
 #SPIDER_MIDDLEWARES = {
@@ -68,9 +71,6 @@ DOWNLOAD_DELAY = 1
 SPIDER_MIDDLEWARES = {
 }
 
-# Spider Partition ID (format I/N meaning this is spider I of N spiders)
-SPIDER_PARTITION_ID="1/2"
-# Can override at runtime with additional args like `-s SPIDER_PARTITION_ID=5/5`
 
 
 # Enable or disable downloader middlewares
