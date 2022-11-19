@@ -158,7 +158,7 @@ def main():
                 request = urlInfo_to_request(uf_response)
                 print(request)
         elif args.op == 'put-urls':
-            # FIXME Need to support crawl distribution over crawl IDs
+            # Support crawl distribution over crawl IDs
             if args.num_partitions is None:
                 spider_id = None
                 num_partitions = 1
