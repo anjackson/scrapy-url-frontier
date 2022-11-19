@@ -15,6 +15,7 @@ from urlfrontier.grpc.urlfrontier_pb2_grpc import URLFrontierStub
 from urlfrontier.grpc.urlfrontier_pb2 import AnyCrawlID, GetParams, URLInfo, URLItem, DiscoveredURLItem, KnownURLItem, StringList, QueueWithinCrawlParams, Pagination, Local, DeleteCrawlMessage
 
 from urlfrontier.scheduler import request_to_urlInfo, urlInfo_to_request
+from urlfrontier.distribution import HashRingDistributor
 
 logging.basicConfig(level=logging.WARNING, format='%(asctime)s: %(levelname)s - %(name)s - %(message)s')
 
@@ -93,6 +94,8 @@ def main():
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
         parents=[common_parser, crawlid_parser])
     parser_puturls.add_argument('-q', '--queue', help="Key for the crawl queue to add the URL(s) to. If unset, uses the host name.")
+    parser_puturls.add_argument('-N', '--num-partitions', type=int, default=None, help="Number of partitions to use. If set, Crawl ID (spider name) has a partition suffix added, eg. 'crawl.2'.")
+    parser_puturls.add_argument('--partition-separator', default=".", help="Character to use to separate the Crawl ID (spider name) from the partition number.")
     parser_puturls.add_argument('urls', help="URL to enqueue, or a filename to read URLs from, or '-' to read from STDIN.")
 
 
@@ -155,10 +158,24 @@ def main():
                 request = urlInfo_to_request(uf_response)
                 print(request)
         elif args.op == 'put-urls':
+            # FIXME Need to support crawl distribution over crawl IDs
+            if args.num_partitions is None:
+                spider_id = None
+                num_partitions = 1
+            else:
+                spider_id = 1 # Any value, to enable partitions
+                num_partitions = args.num_partitions
+            hr = HashRingDistributor(
+                spider_id=spider_id,
+                spider_name=args.crawl_id,
+                num_spiders=num_partitions,
+                separator=args.partition_separator,
+            )
             request = Request(args.urls)
+            request = hr.set_spider_id(request)
             urlInfo = request_to_urlInfo(request, 
-                crawlID=args.crawl_id, 
                 encoder=None)
+            logger.info(f"URLInfo {urlInfo} with CrawlID {urlInfo.crawlID}")
             #uf_request = URLItem(known=KnownURLItem(info=urlInfo, refetchable_from_date=0))
             uf_request = URLItem(discovered=DiscoveredURLItem(info=urlInfo))
             for uf_response in stub.PutURLs(iter([uf_request])):
@@ -167,8 +184,10 @@ def main():
 
         elif args.op == 'get-active':
             raise Exception("Unimplemented operation " + args.op)
+
         elif args.op == 'set-active':
             raise Exception("Unimplemented operation " + args.op)
+
         elif args.op == 'delete-queue':
             queue = args.queue
             crawlID = args.crawl_id

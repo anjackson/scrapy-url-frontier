@@ -1,3 +1,6 @@
+# 
+
+import re
 import time
 import json
 import logging
@@ -46,7 +49,7 @@ def request_to_urlInfo(request: Request, crawlID=None, queue=None, encoder=None,
             url=canon_url,
             # queue=None means frontier default queue key
             key=queue,
-            crawlID=crawlID,
+            crawlID=request.meta.get('spiderid', crawlID),
             metadata=metadata
         )
 
@@ -95,8 +98,34 @@ class URLFrontierScheduler():
         self.crawler = crawler
         self.default_delay_requestable = crawler.settings.getint('SCHEDULER_URLFRONTIER_DEFAULT_DELAY_REQUESTABLE', 10*60*60)
         self.max_queues = crawler.settings.getint('SCHEDULER_URLFRONTIER_GETURLS_MAX_QUEUES', 10)
-        self.distributor = HashRingDistributor(crawler)
+
+        # Hash Ring Distribution configuration:
+        self.spider_name = crawler.spider.name
+        spider_partition_id = crawler.settings.get('SPIDER_PARTITION_ID', None)
+        if spider_partition_id is None:
+            # Don't partition if this field is not set:
+            spider_i = None
+        else:
+            # Validate the X/N string:
+            pattern = re.compile("^\d+\/\d+$")
+            if not pattern.match(spider_partition_id):
+                raise Exception("SPIDER_PARTITION_ID must be in the form X/N, e.g. 1/2.")
+            # Parse the partition ID
+            spider_i, num_spiders = spider_partition_id.split('/')
+            spider_i = int(spider_i)
+            self.num_spiders = int(num_spiders)
+            if spider_i <= 0 or spider_i > self.num_spiders:
+                raise Exception("SPIDER_PARTITION_ID must specify an ID between 1 and N.")
+            self.partition_separator = crawler.settings.get('PARTITION_SEPARATOR', ".")
+        # Set up hash ring based on these parameters:
+        self.distributor = HashRingDistributor(
+            spider_name=self.spider_name,
+            spider_id=spider_i,
+            num_spiders=self.num_spiders,
+            separator=self.partition_separator,
+            )
         self.spider_id = self.distributor.get_spider_partition()
+
         self._logger = logging.getLogger("urlfrontier-scheduler")
         # Set up codec (supporting Frontera codecs):
         codec_path = crawler.settings.get('SCHEDULER_URLFRONTIER_CODEC', None)
@@ -176,7 +205,7 @@ class URLFrontierScheduler():
         For reference, the default Scrapy scheduler returns ``False`` when the
         request is rejected by the dupefilter.
         """
-        self.distributor.set_spider_id(request, self.crawler.spider)
+        request = self.distributor.set_spider_id(request, self.crawler.spider)
         urlInfo = request_to_urlInfo(request, encoder=self._encoder,
             crawlID=request.meta['spiderid'])
         self.crawler.stats.inc_value('urlfrontier/enqueue_request_count')
