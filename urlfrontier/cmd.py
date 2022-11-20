@@ -14,8 +14,7 @@ import grpc
 from urlfrontier.grpc.urlfrontier_pb2_grpc import URLFrontierStub
 from urlfrontier.grpc.urlfrontier_pb2 import AnyCrawlID, GetParams, URLInfo, URLItem, DiscoveredURLItem, KnownURLItem, StringList, QueueWithinCrawlParams, Pagination, Local, DeleteCrawlMessage
 
-from urlfrontier.scheduler import request_to_urlInfo, urlInfo_to_request
-from urlfrontier.distribution import HashRingDistributor
+from urlfrontier.distribution import HashRingDistributor, urlInfo_to_request
 
 logging.basicConfig(level=logging.WARNING, format='%(asctime)s: %(levelname)s - %(name)s - %(message)s')
 
@@ -171,14 +170,19 @@ def main():
                 num_spiders=num_partitions,
                 separator=args.partition_separator,
             )
-            request = Request(args.urls)
-            request = hr.set_spider_id(request)
-            urlInfo = request_to_urlInfo(request, 
-                encoder=None)
-            logger.info(f"URLInfo {urlInfo} with CrawlID {urlInfo.crawlID}")
-            #uf_request = URLItem(known=KnownURLItem(info=urlInfo, refetchable_from_date=0))
-            uf_request = URLItem(discovered=DiscoveredURLItem(info=urlInfo))
-            for uf_response in stub.PutURLs(iter([uf_request])):
+            if args.urls == '-':
+                def uf_generator():
+                    for line in sys.stdin:
+                        yield hr.request_to_put_url(line.strip())
+            elif os.path.isfile(args.urls):
+                def uf_generator():
+                    with open(args.urls) as f:
+                        for line in f:
+                            yield hr.request_to_put_url(line.strip())
+            else:
+                def uf_generator():
+                    yield hr.request_to_put_url(args.urls)
+            for uf_response in stub.PutURLs(uf_generator()):
                 # Status 0 OK, 1 Skipped, 2 FAILED
                 logger.debug("PutURL ID=%s Status=%i" % (uf_response.ID, uf_response.status))
 

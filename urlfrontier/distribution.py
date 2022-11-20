@@ -3,12 +3,64 @@
 #
 
 import re
+import json
 import scrapy
 import logging
 from urllib.parse import urlparse
 from uhashring import HashRing
+from urlfrontier.grpc.urlfrontier_pb2 import AnyCrawlID, GetParams, URLInfo, URLItem, DiscoveredURLItem, KnownURLItem, StringList, QueueWithinCrawlParams, Pagination, Local, DeleteCrawlMessage
+from w3lib.url import canonicalize_url
+
 
 logger = logging.getLogger(__name__)
+
+#  Convert Request to URLInfo
+def request_to_urlInfo(request: scrapy.Request, crawlID=None, queue=None, encoder=None, keep_fragments=False):
+
+    # Canonicalize the URL for the unique key:
+    canon_url = canonicalize_url(request.url, keep_fragments=keep_fragments)
+
+    if encoder is not None:
+        encoded_request = encoder.encode_request(request)
+
+        return URLInfo(
+            # URLs placed in canonical form to avoid duplicate requests:
+            url=canon_url,
+            # key=None means frontier default queue key
+            key=queue, 
+            crawlID=request.meta.get('spiderid', crawlID),
+            metadata={'scrapy_request': StringList(values=[encoded_request])}
+        )
+    else:
+        metadata = {}
+        metadata['meta'] = StringList(values=[ json.dumps(request.meta) ])
+        metadata['original_url'] = StringList(values=[ request.url ])
+        return URLInfo(
+            # URLs placed in canonical form to avoid duplicate requests:
+            url=canon_url,
+            # queue=None means frontier default queue key
+            key=queue,
+            crawlID=request.meta.get('spiderid', crawlID),
+            metadata=metadata
+        )
+
+def urlInfo_to_request(uf: URLInfo, decoder=None):
+    if 'scrapy_request' in uf.metadata:
+        encoded_request = uf.metadata['scrapy_request'].values[0]
+        return decoder.decode_request(encoded_request)
+    else:
+        # Override URL with metadata URL if set:
+        if 'original_url' in uf.metadata:
+            original_url = uf.metadata['original_url'].values[0]
+        else:
+            original_url = uf.url
+        if 'meta' in uf.metadata:
+            meta = json.loads(uf.metadata['meta'].values[0])
+        else:
+            meta = {}
+        # Build the Request object:
+        return scrapy.Request(url=original_url, meta=meta)
+
 
 class HashRingDistributor():
     """
@@ -61,3 +113,19 @@ class HashRingDistributor():
 
         return request
 
+    def matches_spider_id(self, request: scrapy.Request):
+        # Check the ID associated with this spider matches the one allocated to the request:
+        if self.get_spider_partition() == request.meta.get('spiderid', None):
+            return True
+        else:
+            return False
+
+    def request_to_put_url(self, url: str, encoder=None, known=False, refetch_date=0):
+        request = scrapy.Request(url)
+        request = self.set_spider_id(request)
+        urlInfo = request_to_urlInfo(request, encoder=encoder)
+        logger.info(f"URLInfo {urlInfo} with CrawlID {urlInfo.crawlID}")
+        if known:
+            return URLItem(known=KnownURLItem(info=urlInfo, refetchable_from_date=refetch_date))
+        else:
+            return URLItem(discovered=DiscoveredURLItem(info=urlInfo))

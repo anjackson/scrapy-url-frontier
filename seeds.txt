@@ -1,1 +1,6 @@
 http://example.com/
+http://example.org/
+http://data.webarchive.org.uk/crawl-test-site/
+http://acid.matkelly.com/
+https://ibnesayeed.github.io/acrts/
+https://anjackson.net

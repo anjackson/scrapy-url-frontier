@@ -5,7 +5,6 @@ import time
 import json
 import logging
 from typing import Optional, Type, TypeVar
-from w3lib.url import canonicalize_url
 
 from twisted.internet.defer import Deferred
 
@@ -21,54 +20,7 @@ from scrapy.utils.misc import create_instance, load_object
 import grpc
 from urlfrontier.grpc.urlfrontier_pb2_grpc import URLFrontierStub
 from urlfrontier.grpc.urlfrontier_pb2 import GetParams, URLInfo, URLItem, DiscoveredURLItem, KnownURLItem, StringList, QueueDelayParams
-from urlfrontier.distribution import HashRingDistributor
-
-#  Convert Request to URLInfo
-def request_to_urlInfo(request: Request, crawlID=None, queue=None, encoder=None, keep_fragments=False):
-
-    # Canonicalize the URL for the unique key:
-    canon_url = canonicalize_url(request.url, keep_fragments=keep_fragments)
-
-    if encoder is not None:
-        encoded_request = encoder.encode_request(request)
-
-        return URLInfo(
-            # URLs placed in canonical form to avoid duplicate requests:
-            url=canon_url,
-            # key=None means frontier default queue key
-            key=queue, 
-            crawlID=request.meta.get('spiderid', crawlID),
-            metadata={'scrapy_request': StringList(values=[encoded_request])}
-        )
-    else:
-        metadata = {}
-        metadata['meta'] = StringList(values=[ json.dumps(request.meta) ])
-        metadata['original_url'] = StringList(values=[ request.url ])
-        return URLInfo(
-            # URLs placed in canonical form to avoid duplicate requests:
-            url=canon_url,
-            # queue=None means frontier default queue key
-            key=queue,
-            crawlID=request.meta.get('spiderid', crawlID),
-            metadata=metadata
-        )
-
-def urlInfo_to_request(uf: URLInfo, decoder=None):
-    if 'scrapy_request' in uf.metadata:
-        encoded_request = uf.metadata['scrapy_request'].values[0]
-        return decoder.decode_request(encoded_request)
-    else:
-        # Override URL with metadata URL if set:
-        if 'original_url' in uf.metadata:
-            original_url = uf.metadata['original_url'].values[0]
-        else:
-            original_url = uf.url
-        if 'meta' in uf.metadata:
-            meta = json.loads(uf.metadata['meta'].values[0])
-        else:
-            meta = {}
-        # Build the Request object:
-        return Request(url=original_url, meta=meta)
+from urlfrontier.distribution import HashRingDistributor, urlInfo_to_request, request_to_urlInfo
 
 #class URLFrontierScheduler(BaseScheduler):
 # BaseScheduler appears not to be release yet...
@@ -250,6 +202,7 @@ class URLFrontierScheduler():
     def _record_response(self, response, request, spider):
         ### Signal handler to record downloader outcomes
         # https://docs.scrapy.org/en/latest/topics/signals.html#response-downloaded
+        # i.e. this records the outcome of the download.
         self._logger.debug(f"Recording crawl outcome request={request} response={response}")
         # Set the partition:
         self.distributor.set_spider_id(request, self.crawler.spider)
