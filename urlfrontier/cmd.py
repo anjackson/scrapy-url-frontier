@@ -171,8 +171,8 @@ def main():
             )
             for uf_response in stub.GetURLs(g):
                 print("url=%s, metadata=%s" % (uf_response.url, uf_response.metadata))
-                request = urlInfo_to_request(uf_response)
-                print(request)
+                #request = urlInfo_to_request(uf_response)
+                #print(request)
         elif args.op == 'put-urls':
             # Support crawl distribution over crawl IDs
             if args.num_partitions is None:

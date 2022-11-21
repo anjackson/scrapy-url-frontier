@@ -1,7 +1,7 @@
 scrapy-url-frontier
 ===================
 
-This project provides a [Scheduler](https://docs.scrapy.org/en/latest/topics/scheduler.html) for [Scrapy](https://scrapy.org) that uses [crawler-commons URL Frontier](https://github.com/crawler-commons/url-frontier#readme). This can use used as a persistent frontier for multiple different spiders, and can be used to partition broad crawls across multiple instances of the same spider.
+This project provides a [Scheduler](https://docs.scrapy.org/en/latest/topics/scheduler.html) for [Scrapy](https://scrapy.org) that uses [crawler-commons URL Frontier](https://github.com/crawler-commons/url-frontier#readme). This can use used as a persistent frontier for multiple different spiders, and can be used to partition large crawls across multiple instances of the same spider.
 
 This is an early experiment, and has not yet been used at scale or benchmarked. More mature options include:
 
@@ -13,13 +13,17 @@ This is an early experiment, and has not yet been used at scale or benchmarked. 
 
 ## Usage
 
-First, deploy an instance of a URL Frontier service. This module has been tested against the [reference implementation](https://github.com/crawler-commons/url-frontier/blob/master/service/README.md), and is known to be compatible with version 2.4.
+First, deploy an instance of a URL Frontier service. This module has been tested against the [reference implementation](https://github.com/crawler-commons/url-frontier/blob/master/service/README.md), and is known to be compatible with version 2.3.1.
 
 A `docker-compose.yml` file is included, which can fire up a suitable service like this:
 
     docker compose up urlfrontier
 
-To run a Scrapy spider that uses the URL Frontier, the Scheduler can be configure like this:
+To run a Scrapy spider that uses the URL Frontier, first install this module in your Scrapy project (or use the example crawler in this repository). There is no official release at present, so needs to be installed like this:
+
+    pip install git+https://github.com/anjackson/scrapy-url-frontier.git@main
+
+Once installed, the `Scheduler` can be configure like this:
 
     SCHEDULER='urlfrontier.scheduler.URLFrontierScheduler'
     SCHEDULER_URLFRONTIER_ENDPOINT='127.0.0.1:7071'
@@ -32,7 +36,7 @@ URLFrontier can be used to implement crawl rate/delay and deduplication, but not
 
 ## Example Spider
 
-Then ran a simple spider with:
+In this project, the example spider can be run with with:
 
     scrapy crawl example
 

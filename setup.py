@@ -1,4 +1,4 @@
-from setuptools import setup
+from setuptools import setup, find_packages
 import subprocess
 
 def get_version():
@@ -12,7 +12,7 @@ setup(
     version=get_version(),
     author='Andrew N. Jackson',
     author_email='anj@anjackson.net',
-    packages=['urlfrontier'],
+    packages=find_packages(),
     package_data={'urlfrontier': ['grpc/urlfrontier.proto']},
     #url='http://pypi.python.org/pypi/scrapy-url-frontier/',
     license='LICENSE.txt',

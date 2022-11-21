@@ -4,9 +4,7 @@ services:
 
   urlfrontier:
     user: root
-    image: crawlercommons/url-frontier:master
-    #image: crawlercommons/url-frontier:2.3
-    #image: crawlercommons/url-frontier:2.2-bugfix
+    image: crawlercommons/url-frontier:2.3.1
     command: -s 9100 rocksdb.path=/storage/rocksdb
     ports:
     - "7071:7071"
