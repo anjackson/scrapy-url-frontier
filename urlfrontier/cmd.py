@@ -12,7 +12,7 @@ from scrapy.http.request import Request
 
 import grpc
 from urlfrontier.grpc.urlfrontier_pb2_grpc import URLFrontierStub
-from urlfrontier.grpc.urlfrontier_pb2 import AnyCrawlID, GetParams, URLInfo, URLItem, DiscoveredURLItem, KnownURLItem, StringList, QueueWithinCrawlParams, Pagination, Local, DeleteCrawlMessage
+from urlfrontier.grpc.urlfrontier_pb2 import AnyCrawlID, GetParams, URLInfo, URLItem, DiscoveredURLItem, KnownURLItem, StringList, QueueWithinCrawlParams, Pagination, Local, DeleteCrawlMessage, Active
 
 from urlfrontier.distribution import HashRingDistributor, urlInfo_to_request
 
@@ -98,6 +98,20 @@ def main():
     parser_puturls.add_argument('-m','--meta',action='append',nargs=2, metavar=('name','value'),help='Metadata fields to add, as name/value pairs. Can be repeated.')
     parser_puturls.add_argument('urls', help="URL to enqueue, or a filename to read URLs from, or '-' to read from STDIN.")
 
+    # Add a parser a subcommand:
+    parser_getactive = subparsers.add_parser(
+        'get-active', 
+        help='Get the active status of the URLFrontier.',
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        parents=[common_parser])
+
+    # Add a parser a subcommand:
+    parser_setactive = subparsers.add_parser(
+        'set-active', 
+        help='Set the active status of the URLFrontier.',
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        parents=[common_parser])
+    parser_setactive.add_argument('-A', '--active', action=argparse.BooleanOptionalAction, required=True, help="Activate/deactivate the getting URLs from frontier.")
 
     # And PARSE it:
     args = parser.parse_args()
@@ -193,10 +207,16 @@ def main():
                 logger.debug("PutURL ID=%s Status=%i" % (uf_response.ID, uf_response.status))
 
         elif args.op == 'get-active':
-            raise Exception("Unimplemented operation " + args.op)
+            response = stub.GetActive(Local(local=DEFAULT_LOCAL))
+            print(response.state)
 
         elif args.op == 'set-active':
-            raise Exception("Unimplemented operation " + args.op)
+            print(f"Setting active status to {args.active}")
+            response = stub.SetActive(
+                Active(
+                    state=args.active, 
+                    local=DEFAULT_LOCAL
+                    ))
 
         elif args.op == 'delete-queue':
             queue = args.queue
