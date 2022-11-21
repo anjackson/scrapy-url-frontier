@@ -95,6 +95,7 @@ def main():
     parser_puturls.add_argument('-q', '--queue', help="Key for the crawl queue to add the URL(s) to. If unset, uses the host name.")
     parser_puturls.add_argument('-N', '--num-partitions', type=int, default=None, help="Number of partitions to use. If set, Crawl ID (spider name) has a partition suffix added, eg. 'crawl.2'.")
     parser_puturls.add_argument('--partition-separator', default=".", help="Character to use to separate the Crawl ID (spider name) from the partition number.")
+    parser_puturls.add_argument('-m','--meta',action='append',nargs=2, metavar=('name','value'),help='Metadata fields to add, as name/value pairs. Can be repeated.')
     parser_puturls.add_argument('urls', help="URL to enqueue, or a filename to read URLs from, or '-' to read from STDIN.")
 
 
@@ -170,18 +171,23 @@ def main():
                 num_spiders=num_partitions,
                 separator=args.partition_separator,
             )
+            # Gather any metadata fields:
+            meta = {}
+            for name, value in args.meta:
+                meta[name] = value
+            # Process the URLs
             if args.urls == '-':
                 def uf_generator():
                     for line in sys.stdin:
-                        yield hr.request_to_put_url(line.strip())
+                        yield hr.request_to_put_url(line.strip(), meta)
             elif os.path.isfile(args.urls):
                 def uf_generator():
                     with open(args.urls) as f:
                         for line in f:
-                            yield hr.request_to_put_url(line.strip())
+                            yield hr.request_to_put_url(line.strip(), meta)
             else:
                 def uf_generator():
-                    yield hr.request_to_put_url(args.urls)
+                    yield hr.request_to_put_url(args.urls, meta)
             for uf_response in stub.PutURLs(uf_generator()):
                 # Status 0 OK, 1 Skipped, 2 FAILED
                 logger.debug("PutURL ID=%s Status=%i" % (uf_response.ID, uf_response.status))

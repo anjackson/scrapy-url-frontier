@@ -120,8 +120,8 @@ class HashRingDistributor():
         else:
             return False
 
-    def request_to_put_url(self, url: str, encoder=None, known=False, refetch_date=0):
-        request = scrapy.Request(url)
+    def request_to_put_url(self, url: str, meta=None, encoder=None, known=False, refetch_date=0):
+        request = scrapy.Request(url, meta=meta)
         request = self.set_spider_id(request)
         urlInfo = request_to_urlInfo(request, encoder=encoder)
         logger.info(f"URLInfo {urlInfo} with CrawlID {urlInfo.crawlID}")
