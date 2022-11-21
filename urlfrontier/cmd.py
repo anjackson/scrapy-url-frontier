@@ -85,6 +85,8 @@ def main():
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
         parents=[common_parser, crawlid_parser])
     parser_listurls.add_argument('-q', '--queue', help="Key for the crawl queue to list URLs from, e.g. 'example.com'.")
+    parser_listurls.add_argument('-M', '--max-queues', type=int, default=0, help='Maximum number of queues to list URLs from. 0 means no limit.')
+    parser_listurls.add_argument('-N', '--max-urls', '--max-urls-per-queue', type=int, default=1, help='Maximum number of URLs to return per queue.')
 
     # Add a parser a subcommand:
     parser_puturls = subparsers.add_parser(
@@ -160,8 +162,8 @@ def main():
             print(f"Deleted {deleted.value} URLs from crawl {args.crawl_id}.")
         elif args.op == 'list-urls':
             g = GetParams(
-                max_urls_per_queue = 100,
-                max_queues = 0,
+                max_urls_per_queue = args.max_urls,
+                max_queues = args.max_queues,
                 delay_requestable = 1,
                 key = args.queue,
                 crawlID = args.crawl_id, # Needed if querying a specific queue key, otherwise:
@@ -186,9 +188,11 @@ def main():
                 separator=args.partition_separator,
             )
             # Gather any metadata fields:
-            meta = {}
-            for name, value in args.meta:
-                meta[name] = value
+            meta = None
+            if args.meta:
+                meta = {}
+                for name, value in args.meta:
+                    meta[name] = value
             # Process the URLs
             if args.urls == '-':
                 def uf_generator():
