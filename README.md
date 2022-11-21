@@ -40,35 +40,53 @@ In this project, the example spider can be run with with:
 
     scrapy crawl example
 
-The crawl runs at this point, and because `allowed_domains` is unset, quickly widens in scope to cover a number of hosts.
+At this point, nothing will happen as there are no `start_urls` or `start_requests` set for the spider. To get things going, you can launch a URL into the crawl using the command-line tool:
+
+    scrapy-url-frontier put-urls -u localhost:7071 -C example https://example.org/
+
+Where the `-C example` sets the Crawl ID to match the name of the Scrapy spider. 
+
+The crawl will now run, and because `allowed_domains` is unset, quickly widens in scope to cover a number of hosts.
 
 If the crawl is killed and restarted, the crawl will continue to get the URLs that were discovered but not crawled.
 
-But the crawl will not make a full restart, i.e. the URL Frontier acts as a dupe filter. However, seed URLs get marked as `dont_filter` and this is implemented here as allowing immediate recrawl, so seeds will be re-fetched on restarts.
+But the crawl will not make a full restart, i.e. the URL Frontier acts as a duplicate filter. However, if URLs are marked as `dont_filter`, this is implemented here as allowing immediate re-crawl. i.e. a Scrapy request with `request.meta['dont_filter'] = True'.
 
-## URL Frontier Client
+If your spider sets `start_urls` or `start_requests`, these will be sent to the URL Frontier be every spider.  In general, this works fine as duplicate requests get filtered out. But if you also set 'dont_filter' this will make the seed URLs recrawl if one spider starts after another spider has already finished crawling those URLs.
+
+## URL Frontier Command-Line Client
+
+The `scrapy-url-frontier` client supports all URL Frontier operations (as of v. 2.3.1). for example:
 
     scrapy-url-frontier list-crawls -u localhost:7071
 
+Will return a list of all Crawl IDs, corresponding to Scrapy spider names or name+partition in the case of distributed crawls (see below).
+
+For each crawl, you can list URLs using e.g.
+
+    scrapy-url-frontier list-urls -u localhost:7071 -C example
+
+The full list of commands is:  `get-stats,list-crawls,delete-crawl,list-queues,delete-queue,list-urls,put-urls,get-active,set-active`. For more information, see the command line help e.g. `scrapy-url-frontier -h` or `scrapy-url-frontier list-queues -h`. 
 
 ## Distributed Crawls
 
+The URL Frontier can also be used to distributed a crawl over multiple instances of the same Scrapy spider, allowing crawls to be scaled out beyond the capacity of a single crawler process.
 
-So, when integrating Scrapy with URLFrontier, how this works depends on the integration pattern. If we can't consistently route queues, then we could shift to relying on URLFrontier to manage crawl delays, but each Scrapy spider would have to fetch it's own copy of robots.txt. This could perhaps be alleviated by using some kind of shared cache, possibly even re-using the archived versions from the archiving proxy. But there may be other per-site state that is best cached locally, like cookies or browser sessions.
-
-However, if can consistently route queues to the same Scrapy spider instances, then we can set the URLFrontier delay to e.g. 0 and let Scrapy handle delays and local caching  of things like robots.txt etc. While avoiding adding more components, the current URLFrontier offers a couple of possible ways to implement this.
-
-One would be for each spider to regularly list all queues, and knowing that it is spider _x_ of _N_, allocate a subset of the queues to itself. It would then only run `GetURLs` for those queues.  This would be quite nice, but because we can't use partial queue matches, each queue would need a separate `GetURLs` call. So this scales poorly.
-
-It would be possible to use the queues as the partitions instead. i.e. there are _N_ queues that each cover _1/N_ of the crawl, rather than a queue per host. This would scale, but make the URL Frontier itself less useful, as per-host operations would no longer be easy and each 'queue' would be very large.
-
-A more scalable alternative is to pre-partition the crawl using separate crawl IDs. If the crawl is called `domain_scan` we can define _P_ partitions and create crawl IDs like `domain_scan_1`, `domain_scan_2`, `domain_scan_3` ... Each _x/N_ spider would then allocate itself to one or more crawl partitions, with the simplest arrangement being _P=N_ i.e. one crawl partition per spider.  This should work fine, but if the number of partitions/spiders needs to be changed, it may be necessary to drain and re-partition the frontier.
-
+To ensure resources like `robots.txt` are cached effectively, we partition the crawl queues so the same queues always get routed to the same spiders. For each unique spider, e.g. the `example` spider, we create different Crawl IDs for each partition. e.g. `example.1` and `example.2` for a crawl distributed over two spider instances.
 
 Extending [Frontera's naming conventions](https://frontera.readthedocs.io/en/latest/topics/cluster-setup.html#starting-the-cluster) we can use [command-line options](https://docs.scrapy.org/en/latest/topics/settings.html#command-line-options) to configure the URL partitioning scheme:
 
     scrapy crawl example -s SPIDER_PARTITION_ID=1/2
 
+And elsewhere:
+
+    scrapy crawl example -s SPIDER_PARTITION_ID=2/2
+
+The `put-urls` command also needs to be aware of the number of partitions so it re-uses the right Crawl IDs and routes the URLs to the right place:
+
+    scrapy-url-frontier put-urls -u localhost:7071 -C example -N 2 https://example.org/
+
+The system uses a consistent hashing method to distribute the URLs. This minimizes the disruption if the number of partitions changes, e.g. if a `N=4` crawl is stopped and restarted with `N=5`, only one fifth of the URLs will be affected. However, during the period while the URLs are being drained out of the `N=4` scheme, new URLs for the same hosts will arrive in the fifth partition and so those affected sites will be crawled at a higher rate. This issue is noted [here](https://github.com/anjackson/scrapy-url-frontier/issues/3).
 
 ## Alternative Encoders
 
