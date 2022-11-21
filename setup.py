@@ -22,10 +22,11 @@ setup(
         "scrapy",
         "uhashring",
         "grpcio",
+        "grpcio-tools",
     ],
     # Additional dependencies for development or use of Frontera classes:
     extras_require={
-        'dev': [ 'pytest','grpcio-tools' ],
+        'dev': [ 'pytest' ],
         'frontera': [ 'frontera' ]
     },
     entry_points={
