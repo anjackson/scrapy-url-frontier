@@ -8,7 +8,7 @@ scrapy-url-frontier <!-- omit in toc -->
 - [Distributed Crawls](#distributed-crawls)
 - [Complex Requests & Alternative Encoders](#complex-requests--alternative-encoders)
 - [Development Setup](#development-setup)
-  - [Updating the GRPC API code:](#updating-the-grpc-api-code)
+  - [Updating the gRPC API code:](#updating-the-grpc-api-code)
 
 ## Introduction
 
@@ -139,7 +139,7 @@ And the (limited) tests run using:
 
     python -m unittest
 
-### Updating the GRPC API code:
+### Updating the gRPC API code:
 
 To update the Python classes for calling the API, use:
 
