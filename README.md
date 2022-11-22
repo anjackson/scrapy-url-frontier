@@ -88,14 +88,15 @@ The `put-urls` command also needs to be aware of the number of partitions so it 
 
 The system uses a consistent hashing method to distribute the URLs. This minimizes the disruption if the number of partitions changes, e.g. if a `N=4` crawl is stopped and restarted with `N=5`, only one fifth of the URLs will be affected. However, during the period while the URLs are being drained out of the `N=4` scheme, new URLs for the same hosts will arrive in the fifth partition and so those affected sites will be crawled at a higher rate. This issue is noted [here](https://github.com/anjackson/scrapy-url-frontier/issues/3).
 
-## Alternative Encoders
+## Complex Requests & Alternative Encoders
+
+When sending Scrapy requests to the URL Frontier, the system defaults to a very simple JSON encoding. We roughly follow Frontera's lead and [just keep these critical elements](https://github.com/scrapinghub/frontera/blob/84f9e1034d2868447db88e865596c0fbb32e70f6/frontera/contrib/backends/remote/codecs/json.py#L58-L63) (while noting that `dont_filter` is not included at present, may be missing `formdata` or `data` from form or JSON requests). 
+
+If more sophisticated encoding is needed, you can `pip install frontera` and re-use their encoders, e.g. the class-aware JSON encoder:
 
     SCHEDULER_URLFRONTIER_CODEC='frontera.contrib.backends.remote.codecs.json'
 
-
-Serialisation is an interesting issue. The `Request` can have references to Callable functions, and even to thread locks, so can't necessarily be pickled as-is.  We can follow Frontera's lead and [just keep these critical elements](https://github.com/scrapinghub/frontera/blob/84f9e1034d2868447db88e865596c0fbb32e70f6/frontera/contrib/backends/remote/codecs/json.py#L58-L63) (while noting that `dont_filter` is not included at present, may be missing `formdata` or `data` from form or JSON requests). But we must note that this will drop any callbacks attached to specific requests (the same as for Frontera, which [throws an error if you break this rule](https://github.com/scrapinghub/scrapy-frontera/blob/fab14232bedbe89b781479a13918eb3166a1564e/scrapy_frontera/scheduler.py#L29-L37)).
-
-
+However, one common pattern is for `Request`s to have references to Callable functions, (or more rarely, references to thread locks), so can't necessarily be encoded as-is, even using Python pickling. i.e. using the URL Frontier will silently drop any callbacks attached to specific requests (the same as for Frontera, which at least [throws an error if you break this rule](https://github.com/scrapinghub/scrapy-frontera/blob/fab14232bedbe89b781479a13918eb3166a1564e/scrapy_frontera/scheduler.py#L29-L37)).
 
 
 ## Development Setup
@@ -104,19 +105,23 @@ Build and run the URL Frontier, as per the instructions. Or, use the supplied Do
 
     docker compose up urlfrontier
 
-Alternative to build...
+Alternatively, if the latest version is needed, that can be checkout out and built locally...
 
     docker build -t crawlercommons/url-frontier:master .
+
+And then the `docker-compose.yml` file updated accordingly.
 
 In another terminal...
 
     sudo apt-get install libffi-dev
 
-Set up a virtualenv and installed all requirements (`scrapy`, `scrapy-playwright`, `grpc` and `grpc-tools`).
+Set up a virtualenv and installed all requirements (`scrapy`,`grpc` and `grpc-tools`).
 
-Generated stubs with:
+### Updating the GRPC API code:
 
-    curl -o urlfrontier/grpc/urlfrontier.proto https://raw.githubusercontent.com/crawler-commons/url-frontier/2.3/API/urlfrontier.proto
+To update the Python classes for calling the API, use:
+
+    curl -o urlfrontier/grpc/urlfrontier.proto https://raw.githubusercontent.com/crawler-commons/url-frontier/2.3.1/API/urlfrontier.proto
     python -m grpc_tools.protoc -I . --python_out=. --grpc_python_out=. urlfrontier/grpc/urlfrontier.proto
 
 
