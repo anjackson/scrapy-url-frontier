@@ -1,5 +1,16 @@
-scrapy-url-frontier
+scrapy-url-frontier <!-- omit in toc -->
 ===================
+
+- [Introduction](#introduction)
+- [Usage](#usage)
+- [Example Spider](#example-spider)
+- [URL Frontier Command-Line Client](#url-frontier-command-line-client)
+- [Distributed Crawls](#distributed-crawls)
+- [Complex Requests & Alternative Encoders](#complex-requests--alternative-encoders)
+- [Development Setup](#development-setup)
+  - [Updating the GRPC API code:](#updating-the-grpc-api-code)
+
+## Introduction
 
 This project provides a [Scheduler](https://docs.scrapy.org/en/latest/topics/scheduler.html) for [Scrapy](https://scrapy.org) that uses [crawler-commons URL Frontier](https://github.com/crawler-commons/url-frontier#readme). This can use used as a persistent frontier for multiple different spiders, and can be used to partition large crawls across multiple instances of the same spider.
 
@@ -10,6 +21,7 @@ This is an early experiment, and has not yet been used at scale or benchmarked. 
 - [Scrapy Cluster](https://scrapy-cluster.readthedocs.io/)
 - [Scrapy Cluster's list of other distributed Scrapy projects](https://scrapy-cluster.readthedocs.io/en/latest/topics/advanced/comparison.html)
 
+Like other crawl distribution techniques, this does place some limitation on how you code your Scrapy spiders. See the [Complex Requests & Alternative Encoders](#complex-requests--alternative-encoders) section below.
 
 ## Usage
 
@@ -28,11 +40,13 @@ Once installed, the `Scheduler` can be configure like this:
     SCHEDULER='urlfrontier.scheduler.URLFrontierScheduler'
     SCHEDULER_URLFRONTIER_ENDPOINT='127.0.0.1:7071'
 
-Scrapy schedulers implement deduplication and canonicalisation as per [request fingerprinting](https://docs.scrapy.org/en/latest/topics/request-response.html#request-fingerprints). The scheduler does not implement crawl rate control, but rather the Downloader uses an internal [slot system to implement crawl delays](https://github.com/scrapy/scrapy/blob/master/scrapy/core/downloader/__init__.py#L140). Scrapy also support various kinds of filtering, including [obeying robot.txt](https://docs.scrapy.org/en/latest/_modules/scrapy/downloadermiddlewares/robotstxt.html#RobotsTxtMiddleware) and [OffsetMiddleware](https://docs.scrapy.org/en/latest/topics/spider-middleware.html#module-scrapy.spidermiddlewares.offsite) as part of the standard setup.
+The URLFrontier service can be used to implement crawl rate/delay and deduplication, but not canonicalisation or any kind of filtering including robots.txt (see [here](https://github.com/crawler-commons/url-frontier/tree/master/API#out-of-scope)). The default crawl delay for each queue is one second (see [here](https://github.com/crawler-commons/url-frontier/blob/1b6c2ec4b14cff24810c718103eca16c8fa17d48/service/src/main/java/crawlercommons/urlfrontier/service/AbstractFrontierService.java#L118)). 
 
-FIXME? Talk more about Canonicalisation?
+The standard Scrapy scheduler implement deduplication and canonicalisation as per [request fingerprinting](https://docs.scrapy.org/en/latest/topics/request-response.html#request-fingerprints). The scheduler does not implement crawl rate control, but rather the Downloader uses an internal [slot system to implement crawl delays](https://github.com/scrapy/scrapy/blob/master/scrapy/core/downloader/__init__.py#L140). Scrapy also support various kinds of filtering, including [obeying robot.txt](https://docs.scrapy.org/en/latest/_modules/scrapy/downloadermiddlewares/robotstxt.html#RobotsTxtMiddleware) and [OffsetMiddleware](https://docs.scrapy.org/en/latest/topics/spider-middleware.html#module-scrapy.spidermiddlewares.offsite) as part of the standard setup.
 
-URLFrontier can be used to implement crawl rate/delay and deduplication, but not canonicalisation or any kind of filtering including robots.txt (see [here](https://github.com/crawler-commons/url-frontier/tree/master/API#out-of-scope)). The default crawl delay for each queue is one second (see [here](https://github.com/crawler-commons/url-frontier/blob/1b6c2ec4b14cff24810c718103eca16c8fa17d48/service/src/main/java/crawlercommons/urlfrontier/service/AbstractFrontierService.java#L118)). However, because Scrapy handles crawl delays in the Downloader rather than the Scheduler, the URL Frontier crawl delay becomes a kind of maximum speed. i.e. while URL Frontier emits one URL per second per queue, Scrapy may crawl more slowly depending on the configuration.
+Therefore, when integrating Scrapy with URL Frontier, the remote service is used to queue and de-duplicate URLs. Everything else is handled by Scrapy.  The `URLFrontierScheduler` canonicalises the URLs using the [same approach as Scrapy](https://github.com/scrapy/scrapy/blob/82f25bc44acd2599115fa339967b436189eec9c1/scrapy/utils/request.py#L132) but does not take the request method or body into account. As for crawl delays/politeness, Scrapy handles this in the Downloader as usual, so the URL Frontier crawl delay becomes a kind of maximum speed. i.e. while URL Frontier emits one URL per second per queue, Scrapy may crawl more slowly depending on the configuration.
+
+The crawl rate, and all other behaviour like filtering and obeying robots.txt, are the responsibility of your Scrapy spider implementation and configuration.
 
 ## Example Spider
 
