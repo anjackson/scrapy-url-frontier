@@ -42,9 +42,9 @@ Once installed, the `Scheduler` can be configure like this:
 
 The URLFrontier service can be used to implement crawl rate/delay and deduplication, but not canonicalisation or any kind of filtering including robots.txt (see [here](https://github.com/crawler-commons/url-frontier/tree/master/API#out-of-scope)). The default crawl delay for each queue is one second (see [here](https://github.com/crawler-commons/url-frontier/blob/1b6c2ec4b14cff24810c718103eca16c8fa17d48/service/src/main/java/crawlercommons/urlfrontier/service/AbstractFrontierService.java#L118)). 
 
-The standard Scrapy scheduler implement deduplication and canonicalisation as per [request fingerprinting](https://docs.scrapy.org/en/latest/topics/request-response.html#request-fingerprints). The scheduler does not implement crawl rate control, but rather the Downloader uses an internal [slot system to implement crawl delays](https://github.com/scrapy/scrapy/blob/master/scrapy/core/downloader/__init__.py#L140). Scrapy also support various kinds of filtering, including [obeying robot.txt](https://docs.scrapy.org/en/latest/_modules/scrapy/downloadermiddlewares/robotstxt.html#RobotsTxtMiddleware) and [OffsetMiddleware](https://docs.scrapy.org/en/latest/topics/spider-middleware.html#module-scrapy.spidermiddlewares.offsite) as part of the standard setup.
+The standard Scrapy scheduler implements deduplication and canonicalisation as per [request fingerprinting](https://docs.scrapy.org/en/latest/topics/request-response.html#request-fingerprints). The scheduler does not implement crawl rate control, but rather the Downloader uses an internal [slot system to implement crawl delays](https://github.com/scrapy/scrapy/blob/master/scrapy/core/downloader/__init__.py#L140). Scrapy also support various kinds of filtering, including [obeying robot.txt](https://docs.scrapy.org/en/latest/_modules/scrapy/downloadermiddlewares/robotstxt.html#RobotsTxtMiddleware) and [OffsetMiddleware](https://docs.scrapy.org/en/latest/topics/spider-middleware.html#module-scrapy.spidermiddlewares.offsite) as part of the standard setup.
 
-Therefore, when integrating Scrapy with URL Frontier, the remote service is used to queue and de-duplicate URLs. Everything else is handled by Scrapy.  The `URLFrontierScheduler` canonicalises the URLs using the [same approach as Scrapy](https://github.com/scrapy/scrapy/blob/82f25bc44acd2599115fa339967b436189eec9c1/scrapy/utils/request.py#L132) but does not take the request method or body into account. As for crawl delays/politeness, Scrapy handles this in the Downloader as usual, so the URL Frontier crawl delay becomes a kind of maximum speed. i.e. while URL Frontier emits one URL per second per queue, Scrapy may crawl more slowly depending on the configuration.
+Therefore, when integrating Scrapy with URL Frontier, the remote service is used to queue and de-duplicate URLs, while everything else is handled by Scrapy.  The `URLFrontierScheduler` canonicalises the URLs using the [same approach as Scrapy](https://github.com/scrapy/scrapy/blob/82f25bc44acd2599115fa339967b436189eec9c1/scrapy/utils/request.py#L132) but does not take the request method or body into account. As for crawl delays/politeness, Scrapy handles this in the Downloader as usual, so the URL Frontier crawl delay becomes a kind of maximum speed. i.e. while URL Frontier emits one URL per second per queue, Scrapy may crawl more slowly depending on the configuration.
 
 The crawl rate, and all other behaviour like filtering and obeying robots.txt, are the responsibility of your Scrapy spider implementation and configuration.
 
@@ -64,13 +64,13 @@ The crawl will now run, and because `allowed_domains` is unset, quickly widens i
 
 If the crawl is killed and restarted, the crawl will continue to get the URLs that were discovered but not crawled.
 
-But the crawl will not make a full restart, i.e. the URL Frontier acts as a duplicate filter. However, if URLs are marked as `dont_filter`, this is implemented here as allowing immediate re-crawl. i.e. a Scrapy request with `request.meta['dont_filter'] = True'.
+But the crawl will not make a full restart, i.e. the URL Frontier acts as a duplicate filter. However, if URLs are marked as `dont_filter`, this is implemented here as allowing immediate re-crawl. i.e. a Scrapy request with `request.meta['dont_filter'] = True`.
 
-If your spider sets `start_urls` or `start_requests`, these will be sent to the URL Frontier be every spider.  In general, this works fine as duplicate requests get filtered out. But if you also set 'dont_filter' this will make the seed URLs recrawl if one spider starts after another spider has already finished crawling those URLs.
+If your spider sets `start_urls` or `start_requests`, these will be sent to the URL Frontier be every spider.  In general, this works fine as duplicate requests get filtered out. But if you also set `dont_filter` this will make the seed URLs recrawl if one spider starts after another spider has already finished crawling those URLs.
 
 ## URL Frontier Command-Line Client
 
-The `scrapy-url-frontier` client supports all URL Frontier operations (as of v. 2.3.1). for example:
+The `scrapy-url-frontier` client supports all URL Frontier operations (as of v2.3.1). for example:
 
     scrapy-url-frontier list-crawls -u localhost:7071
 
@@ -92,11 +92,11 @@ Extending [Frontera's naming conventions](https://frontera.readthedocs.io/en/lat
 
     scrapy crawl example -s SPIDER_PARTITION_ID=1/2
 
-And elsewhere:
+...and for the second spider:
 
     scrapy crawl example -s SPIDER_PARTITION_ID=2/2
 
-The `put-urls` command also needs to be aware of the number of partitions so it re-uses the right Crawl IDs and routes the URLs to the right place:
+The `put-urls` command also needs to be aware of the number of partitions so it uses the right Crawl IDs and routes the URLs to the right place:
 
     scrapy-url-frontier put-urls -u localhost:7071 -C example -N 2 https://example.org/
 
@@ -106,11 +106,11 @@ The system uses a consistent hashing method to distribute the URLs. This minimiz
 
 When sending Scrapy requests to the URL Frontier, the system defaults to a very simple JSON encoding. We roughly follow Frontera's lead and [just keep these critical elements](https://github.com/scrapinghub/frontera/blob/84f9e1034d2868447db88e865596c0fbb32e70f6/frontera/contrib/backends/remote/codecs/json.py#L58-L63) (while noting that `dont_filter` is not included at present, may be missing `formdata` or `data` from form or JSON requests). 
 
-If more sophisticated encoding is needed, you can `pip install frontera` and re-use their encoders, e.g. the class-aware JSON encoder:
+If more sophisticated encoding is needed, you can `pip install frontera` and re-use their [encoders](https://frontera.readthedocs.io/en/latest/topics/message_bus.html?highlight=encoders#available-codecs), e.g. the class-aware JSON encoder:
 
     SCHEDULER_URLFRONTIER_CODEC='frontera.contrib.backends.remote.codecs.json'
 
-However, one common pattern is for `Request`s to have references to Callable functions, (or more rarely, references to thread locks), so can't necessarily be encoded as-is, even using Python pickling. i.e. using the URL Frontier will silently drop any callbacks attached to specific requests (the same as for Frontera, which at least [throws an error if you break this rule](https://github.com/scrapinghub/scrapy-frontera/blob/fab14232bedbe89b781479a13918eb3166a1564e/scrapy_frontera/scheduler.py#L29-L37)).
+However, not everything can be encoded using these methods. One common pattern is for a `Request` to have a reference to a Callable function as a callback, so can't necessarily be encoded as-is, even using Python pickling. i.e. using the URL Frontier will silently drop any callbacks attached to specific requests (the same as for Frontera, which at least [throws an error if you break this rule](https://github.com/scrapinghub/scrapy-frontera/blob/fab14232bedbe89b781479a13918eb3166a1564e/scrapy_frontera/scheduler.py#L29-L37)).
 
 
 ## Development Setup
@@ -130,6 +130,14 @@ In another terminal...
     sudo apt-get install libffi-dev
 
 Set up a virtualenv and installed all requirements (`scrapy`,`grpc` and `grpc-tools`).
+
+The local version can be run using e.g.
+
+    python -m urlfrontier.cmd list-urls --max-urls 2 --max-queues 2 
+
+And the (limited) tests run using:
+
+    python -m unittest
 
 ### Updating the GRPC API code:
 
