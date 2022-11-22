@@ -1,6 +1,10 @@
 scrapy-url-frontier <!-- omit in toc -->
 ===================
 
+> A Scrapy scheduler to use the [crawler-commons URL Frontier](https://github.com/crawler-commons/url-frontier#readme) as an external persistent crawl frontier.
+
+## Contents <!-- omit in toc -->
+
 - [Introduction](#introduction)
 - [Usage](#usage)
 - [Example Spider](#example-spider)
