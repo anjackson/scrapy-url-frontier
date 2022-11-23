@@ -54,9 +54,11 @@ class URLFrontierScheduler():
         # Hash Ring Distribution configuration:
         self.spider_name = crawler.spider.name
         spider_partition_id = crawler.settings.get('SPIDER_PARTITION_ID', None)
+        self.partition_separator = crawler.settings.get('PARTITION_SEPARATOR', ".")
         if spider_partition_id is None:
             # Don't partition if this field is not set:
             spider_i = None
+            self.num_spiders = 1
         else:
             # Validate the X/N string:
             pattern = re.compile("^\d+\/\d+$")
@@ -68,7 +70,6 @@ class URLFrontierScheduler():
             self.num_spiders = int(num_spiders)
             if spider_i <= 0 or spider_i > self.num_spiders:
                 raise Exception("SPIDER_PARTITION_ID must specify an ID between 1 and N.")
-            self.partition_separator = crawler.settings.get('PARTITION_SEPARATOR', ".")
         # Set up hash ring based on these parameters:
         self.distributor = HashRingDistributor(
             spider_name=self.spider_name,
