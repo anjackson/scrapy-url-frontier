@@ -49,7 +49,8 @@ class URLFrontierScheduler():
         self.stats = crawler.stats
         self.crawler = crawler
         self.default_delay_requestable = crawler.settings.getint('SCHEDULER_URLFRONTIER_DEFAULT_DELAY_REQUESTABLE', 10*60*60)
-        self.max_queues = crawler.settings.getint('SCHEDULER_URLFRONTIER_GETURLS_MAX_QUEUES', 10)
+        # Setting this to anything other that 1 will not work properly right now as next_request can only return one Request:
+        self.max_queues = crawler.settings.getint('SCHEDULER_URLFRONTIER_GETURLS_MAX_QUEUES', 1)
 
         # Hash Ring Distribution configuration:
         self.spider_name = crawler.spider.name
