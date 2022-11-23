@@ -197,12 +197,16 @@ def main():
             if args.urls == '-':
                 def uf_generator():
                     for line in sys.stdin:
-                        yield hr.request_to_put_url(line.strip(), meta)
+                        line = line.strip()
+                        if line:
+                            yield hr.request_to_put_url(line, meta)
             elif os.path.isfile(args.urls):
                 def uf_generator():
                     with open(args.urls) as f:
                         for line in f:
-                            yield hr.request_to_put_url(line.strip(), meta)
+                            line = line.strip()
+                            if line:
+                                yield hr.request_to_put_url(line, meta)
             else:
                 def uf_generator():
                     yield hr.request_to_put_url(args.urls, meta)
