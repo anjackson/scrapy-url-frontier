@@ -37,7 +37,7 @@ A `docker-compose.yml` file is included, which can fire up a suitable service li
 
 To run a Scrapy spider that uses the URL Frontier, first install this module in your Scrapy project (or use the example crawler in this repository). There is no official release at present, so needs to be installed like this:
 
-    pip install git+https://github.com/anjackson/scrapy-url-frontier.git@main
+    pip install -e "git+https://github.com/anjackson/scrapy-url-frontier.git@main#egg=scrapy-url-frontier"
 
 Once installed, the `Scheduler` can be configure like this:
 
